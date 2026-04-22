@@ -1,0 +1,44 @@
+# Ambiente
+.env
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Build / distribuição
+build/
+dist/
+*.egg-info/
+
+# Poetry
+poetry.toml
+
+# IDE
+.vscode/
+.idea/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Testes / cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Arquivos locais
+*.sqlite3
+
+# Documentos locais
+*.docx
+*.pdf
+*.txt
