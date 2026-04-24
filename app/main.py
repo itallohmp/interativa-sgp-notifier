@@ -17,6 +17,7 @@ API desenvolvida para integrar o **SGP** ao **Telegram**, com o objetivo de cons
 
 app = FastAPI(
     title="Interativa Ocorrências API",
+    root_path="/interativa-api",
     description=description,
     version="1.0.0",
     contact={
