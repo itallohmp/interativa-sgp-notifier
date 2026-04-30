@@ -5,7 +5,7 @@ from datetime import date, timedelta
 def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje") -> str:
     hoje = date.today()
 
-    # Define label e intervalo de datas conforme período
+
     if periodo == "d7":
         d7 = hoje - timedelta(days=7)
         label_periodo = f"{d7.strftime('%d/%m/%Y')} até {hoje.strftime('%d/%m/%Y')}"
@@ -23,7 +23,7 @@ def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje") -> str:
 
     for i, ocorrencia in enumerate(ocorrencias, start=1):
         cliente = html.escape(str(ocorrencia.get("cliente", "N/A")))
-        contrato_id = html.escape(str(ocorrencia.get("contrato_id", "N/A")))
+        os_data_agendamento = html.escape(str(ocorrencia.get("os_data_agendamento", "N/A")))
         cidade = html.escape(str(ocorrencia.get("endereco_cidade", "N/A")))
         bairro = html.escape(str(ocorrencia.get("endereco_bairro", "N/A")))
         endereco_numero = html.escape(str(ocorrencia.get("endereco_numero", "N/A")))
@@ -32,7 +32,7 @@ def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje") -> str:
 
         mensagem += (
             f"📌 <b>{i}. Cliente:</b> {cliente}\n"
-            f"<b>Contrato:</b> {contrato_id}\n"
+            f"<b>Horário:</b> {os_data_agendamento}\n"
             f"<b>Cidade:</b> {cidade}\n"
             f"<b>Bairro:</b> {bairro}\n"
             f"<b>Rua:</b> {endereco_logradouro}\n"
