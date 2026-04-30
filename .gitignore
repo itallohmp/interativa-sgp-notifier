@@ -42,3 +42,6 @@ Thumbs.db
 *.docx
 *.pdf
 *.txt
+
+*.dockerfile
+*.gitignore
