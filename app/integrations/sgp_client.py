@@ -1,7 +1,7 @@
 import httpx
-from datetime import date
-from app.config import settings
 from datetime import date, timedelta
+from app.config import settings
+
 
 class SGPClient:
     def __init__(self):
@@ -9,30 +9,29 @@ class SGPClient:
         self.token = settings.SGP_TOKEN
         self.app = settings.SGP_APP
 
-    def listar_ordens_servico_do_dia(self):
-        hoje = date.today().strftime("%Y-%m-%d")
-        # hoje = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
-
+    def _buscar_os(self, data_inicial: str, data_final: str = None) -> list:
         url = f"{self.base_url}/api/os/list"
 
         payload = {
             "app": self.app,
             "token": self.token,
             "status_encerrada": 0,
-            "agendamento_inicial": hoje,
-            "filtro_data": 1
+            "agendamento_inicial": data_inicial,
+            "filtro_data": 1,
         }
 
+        if data_final:
+            payload["agendamento_final"] = data_final
+
         response = httpx.post(url, json=payload, timeout=30.0)
-
-        print("URL FINAL:", url)
-        print("PAYLOAD:", payload)
-        print("STATUS CODE:", response.status_code)
-        print("RESPOSTA:", response.text)
-
         response.raise_for_status()
         return response.json()
-    
-        # dados = response.json()
-        # print("PRIMEIRO ITEM:", dados[0])
-        # return dados
+
+    def listar_ordens_servico_do_dia(self) -> list:
+        hoje = date.today().strftime("%Y-%m-%d")
+        return self._buscar_os(data_inicial=hoje)
+
+    def listar_ordens_servico_d7(self) -> list:
+        hoje = date.today().strftime("%Y-%m-%d")
+        d7 = (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
+        return self._buscar_os(data_inicial=d7, data_final=hoje)

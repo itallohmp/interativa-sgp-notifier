@@ -1,13 +1,13 @@
 from apscheduler.schedulers.background import BackgroundScheduler
-from app.services.occurrence_service import OccurrenceService
+from app.integrations.telegram_client import TelegramClient
 
 
 def iniciar_scheduler():
     scheduler = BackgroundScheduler(timezone="America/Sao_Paulo")
-    service = OccurrenceService()
+    telegram = TelegramClient()
 
     scheduler.add_job(
-        service.enviar_ocorrencias_abertas_telegram,
+        telegram.enviar_menu,
         trigger="cron",
         hour=7,
         minute=30,
@@ -16,7 +16,7 @@ def iniciar_scheduler():
     )
     
     scheduler.add_job(
-        service.enviar_ocorrencias_abertas_telegram,
+        telegram.enviar_menu,
         trigger="cron",
         hour=13,
         minute=0,
