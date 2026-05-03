@@ -67,11 +67,11 @@ async def webhook(request: Request, background: BackgroundTasks):
         telegram.answer_callback_query(callback_id, texto="Buscando OS...")
 
         if data == "os_dia":
-            BackgroundTasks.add_task(
+            background.add_task(
                 service.enviar_ocorrencias_para_chat(chat_id, periodo="hoje"))
 
         elif data == "os_d7":
-            BackgroundTasks.add_task(
+            background.add_task(
                 service.enviar_ocorrencias_para_chat(chat_id, periodo="d7"))
 
         return {"ok": True}
