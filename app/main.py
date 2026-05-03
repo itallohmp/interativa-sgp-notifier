@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, BackgroundTasks
 from app.services.occurrence_service import OccurrenceService
 from app.integrations.telegram_client import TelegramClient
 from app.scheduler import iniciar_scheduler
@@ -55,7 +55,7 @@ def configurar_webhook():
 
 
 @app.post("/webhook")
-async def webhook(request: Request):
+async def webhook(request: Request, background: BackgroundTasks):
     update = await request.json()
 
     if "callback_query" in update:
@@ -67,10 +67,12 @@ async def webhook(request: Request):
         telegram.answer_callback_query(callback_id, texto="Buscando OS...")
 
         if data == "os_dia":
-            service.enviar_ocorrencias_para_chat(chat_id, periodo="hoje")
+            BackgroundTasks.add_task(
+                service.enviar_ocorrencias_para_chat(chat_id, periodo="hoje"))
 
         elif data == "os_d7":
-            service.enviar_ocorrencias_para_chat(chat_id, periodo="d7")
+            BackgroundTasks.add_task(
+                service.enviar_ocorrencias_para_chat(chat_id, periodo="d7"))
 
         return {"ok": True}
 
@@ -80,7 +82,8 @@ async def webhook(request: Request):
         texto = mensagem.get("text", "")
 
         if texto in ("/menu", "/os"):
-            telegram.enviar_menu(chat_id=chat_id)
+            background.add_task(
+                telegram.enviar_menu(chat_id=chat_id))
 
         return {"ok": True}
 
