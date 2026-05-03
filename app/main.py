@@ -68,11 +68,11 @@ async def webhook(request: Request, background: BackgroundTasks):
 
         if data == "os_dia":
             background.add_task(
-                service.enviar_ocorrencias_para_chat(chat_id, periodo="hoje"))
+                service.enviar_ocorrencias_para_chat, chat_id, periodo="hoje")
 
         elif data == "os_d7":
             background.add_task(
-                service.enviar_ocorrencias_para_chat(chat_id, periodo="d7"))
+                service.enviar_ocorrencias_para_chat, chat_id, periodo="d7")
 
         return {"ok": True}
 
@@ -83,7 +83,7 @@ async def webhook(request: Request, background: BackgroundTasks):
 
         if texto in ("/menu", "/os"):
             background.add_task(
-                telegram.enviar_menu(chat_id=chat_id))
+                telegram.enviar_menu, chat_id=chat_id)
 
         return {"ok": True}
 
