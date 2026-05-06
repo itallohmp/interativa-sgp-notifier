@@ -30,3 +30,4 @@ class OccurrenceService:
 
         mensagem = formatar_ocorrencias(ocorrencias, periodo=periodo)
         return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+    

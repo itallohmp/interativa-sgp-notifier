@@ -1,0 +1,21 @@
+stages:
+  - build
+  - deploy_aws
+
+build_images:
+  stage: build
+  image: docker: latest
+
+  services:
+    - docker: dind
+
+  variables:
+    - DOCKER_TLS_CERTDIR: "/certs"
+
+  before_script:
+    - docker login -u $REGISTRY_USER -p $REGISTRY_PASS
+
+  script:
+    - docker build -t itallohmp/sgp-notifer:1.0 notificacao-app/.
+    - docker push itallohmp/sgp-notifer:1.0
+

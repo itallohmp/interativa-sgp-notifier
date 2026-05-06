@@ -28,7 +28,7 @@ def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje") -> str:
         data_str = ocorrencia.get("os_data_agendamento", "")
         hora = data_str[11:16] if len(data_str) >= 16 else "N/A" 
         os_data_agendamento = html.escape(hora)
-        
+        ''
         cidade = html.escape(str(ocorrencia.get("endereco_cidade", "N/A")))
         bairro = html.escape(str(ocorrencia.get("endereco_bairro", "N/A")))
         endereco_numero = html.escape(str(ocorrencia.get("endereco_numero", "N/A")))
