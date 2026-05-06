@@ -16,6 +16,6 @@ build_images:
     - docker login -u $REGISTRY_USER -p $REGISTRY_PASS
 
   script:
-    - docker build -t itallohmp/sgp-notifier:1.0 app/.
+    - docker build -t itallohmp/sgp-notifier:1.0 .
     - docker push itallohmp/sgp-notifer:1.0
 
