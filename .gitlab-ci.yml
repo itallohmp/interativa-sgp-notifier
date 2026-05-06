@@ -4,10 +4,10 @@ stages:
 
 build_images:
   stage: build
-  image: docker: latest
+  image: docker:29.4.1
 
   services:
-    - docker: dind
+    - docker:29.4.1-dind
 
   variables:
     - DOCKER_TLS_CERTDIR: "/certs"
