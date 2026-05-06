@@ -27,10 +27,9 @@ kind: Service
 metadata:
   name: sgp-service
 spec:
-  type: NodePort
+  type: LoadBalancer
   selector:
     app: sgp-notifier
   ports:
     - port: 80
       targetPort: 8000
-      nodePort: 30007
