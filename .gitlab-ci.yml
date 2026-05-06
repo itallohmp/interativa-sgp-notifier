@@ -17,5 +17,5 @@ build_images:
 
   script:
     - docker build -t itallohmp/sgp-notifier:1.0 .
-    - docker push itallohmp/sgp-notifer:1.0
+    - docker push itallohmp/sgp-notifier:1.0
 
