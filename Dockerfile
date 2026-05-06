@@ -20,6 +20,8 @@ COPY pyproject.toml poetry.lock* /app/
 # Configura poetry
 RUN poetry config virtualenvs.create false
 
+COPY pyproject.toml poetry.lock* README.md /app/
+
 # 🔥 Instala dependências
 RUN poetry install --no-interaction --no-ansi
 
