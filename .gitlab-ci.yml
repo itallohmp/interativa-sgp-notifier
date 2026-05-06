@@ -44,4 +44,4 @@ deploy_aws:
 
   script:
     - kubectl get nodes
-    - kubectl apply -f k8s/deployment.yaml
+    - kubectl apply -f k8s-deployment.yaml
