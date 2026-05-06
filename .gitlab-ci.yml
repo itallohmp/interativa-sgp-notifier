@@ -21,6 +21,7 @@ build_images:
     - docker build -t itallohmp/sgp-notifier:1.0 .
     - docker push itallohmp/sgp-notifier:1.0
 
+
 deploy_aws:
   stage: deploy
   image: ubuntu:22.04
@@ -29,19 +30,27 @@ deploy_aws:
     - apt-get update
     - apt-get install -y curl unzip
 
-    # instala AWS CLI
     - curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
     - unzip awscliv2.zip
     - ./aws/install
 
-    # instala kubectl
+    
     - curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
     - chmod +x kubectl
     - mv kubectl /usr/local/bin/
 
-    # configura acesso ao cluster
     - aws eks update-kubeconfig --region $AWS_DEFAULT_REGION --name $EKS_CLUSTER_NAME
 
   script:
-    - kubectl get nodes
+    - kubectl create secret generic sgp-notifier-secret
+      --from-literal=SGP_BASE_URL="$SGP_BASE_URL"
+      --from-literal=SGP_TOKEN="$SGP_TOKEN"
+      --from-literal=SGP_APP="$SGP_APP"
+      --from-literal=TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
+      --from-literal=TELEGRAM_CHAT_ID="$TELEGRAM_CHAT_ID"
+      --from-literal=PUBLIC_URL="$PUBLIC_URL"
+      --dry-run=client -o yaml | kubectl apply -f -
+
     - kubectl apply -f k8s-deployment.yml
+
+    - kubectl rollout restart deployment sgp-notifier
