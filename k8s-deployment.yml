@@ -12,14 +12,15 @@ spec:
       labels:
         app: sgp-notifier
     spec:
-    containers:
-    - name: sgp-notifier
-      image: itallohmp/sgp-notifier:1.0
-      ports:
-      - containerPort: 8000
-      envFrom:
-      - secretRef:
-          name: sgp-notifier-secret
+      containers:
+        - name: sgp-notifier
+          image: itallohmp/sgp-notifier:1.0
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - secretRef:
+                name: sgp-notifier-secret
+
 ---
 apiVersion: v1
 kind: Service
