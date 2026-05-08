@@ -10,6 +10,10 @@ def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje") -> str:
         d7 = hoje - timedelta(days=7)
         label_periodo = f"{d7.strftime('%d/%m/%Y')} até {hoje.strftime('%d/%m/%Y')}"
         titulo = "📅 <b>Interativa Fibra - OS dos Últimos 7 Dias</b>"
+        
+    elif periodo == "amanha":
+        amanha = hoje + timedelta(days=1)
+        titulo = "📡 <b>Interativa Fibra - Ocorrências em Aberto</b>"
     else:
         label_periodo = hoje.strftime("%d/%m/%Y")
         titulo = "📡 <b>Interativa Fibra - Ocorrências em Aberto</b>"

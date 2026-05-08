@@ -33,6 +33,7 @@ class TelegramClient:
                 "inline_keyboard": [
                     [{"text": "📋 OS do Dia", "callback_data": "os_dia"}],
                     [{"text": "📅 OS dos Últimos 7 Dias", "callback_data": "os_d7"}],
+                    [{"text": "📅 OS de Amanhã", "callback_data": "amanha"}],
                 ]
             },
         }

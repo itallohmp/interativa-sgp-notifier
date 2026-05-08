@@ -73,6 +73,10 @@ async def webhook(request: Request, background: BackgroundTasks):
         elif data == "os_d7":
             background.add_task(
                 service.enviar_ocorrencias_para_chat, chat_id, periodo="d7")
+            
+        elif data == "amanha":
+            background.add_task(
+                service.enviar_ocorrencias_para_chat, chat_id, periodo="amanha")
 
         return {"ok": True}
 
