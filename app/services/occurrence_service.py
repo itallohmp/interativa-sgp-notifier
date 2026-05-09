@@ -16,7 +16,7 @@ class OccurrenceService:
         return self.sgp_client.listar_ordens_servico_d7()
 
     def listar_ocorrencias_amanha(self) -> list:
-        return self.sgp_client.listar_ordens_servico_d7()
+        return self.sgp_client.listar_ordens_amanha()
             
     def enviar_ocorrencias_abertas_telegram(self):
         ocorrencias = self.listar_ocorrencias_abertas_do_dia()
