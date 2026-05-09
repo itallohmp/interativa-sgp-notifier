@@ -37,6 +37,6 @@ class SGPClient:
         return self._buscar_os(data_inicial=d7, data_final=hoje)
     
     def listar_ordens_amanha(self) -> list:
-        hoje = date.today.strftime("%Y-%m-%d")
+        hoje = date.today().strftime("%Y-%m-%d")
         amanha = hoje + timedelta(days=1)
         return self._buscar_os(data_inicial=amanha)
