@@ -37,7 +37,7 @@ class SGPClient:
         return self._buscar_os(data_inicial=d7, data_final=hoje)
     
     def listar_ordens_amanha(self) -> list:
-        hoje = date.today()              # objeto date
-        amanha = hoje + timedelta(days=1)  # soma funciona
-        amanha_str = amanha.strftime("%Y-%m-%d")  # só agora vira string
+        hoje = date.today()              
+        amanha = hoje + timedelta(days=1)  
+        amanha_str = amanha.strftime("%Y-%m-%d")  
         return self._buscar_os(data_inicial=amanha_str)

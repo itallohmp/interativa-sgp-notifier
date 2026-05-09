@@ -2,7 +2,7 @@ import html
 from datetime import date, timedelta
 
 
-def formatar_ocorrencias(ocorrencias: list[dict], chat_id: int, periodo: str = "hoje") -> str:
+def formatar_ocorrencias(ocorrencias: list[dict], chat_id: int, periodo: str = "hoje", user_id: int | str = None, user_name: str | None = None) -> str:
     hoje = date.today()
 
 
@@ -25,7 +25,7 @@ def formatar_ocorrencias(ocorrencias: list[dict], chat_id: int, periodo: str = "
     mensagem = f"{titulo}\n\n"
     mensagem += f"<b>Período:</b> {label_periodo}\n"
     mensagem += f"<b>Total:</b> {len(ocorrencias)}\n"
-    mensagem += f"<b>Por:</b> {chat_id}\n\n"
+    mensagem += f"<b>Por:</b> {user_name/user_id}\n\n"
 
     for i, ocorrencia in enumerate(ocorrencias, start=1):
         cliente = html.escape(str(ocorrencia.get("cliente", "N/A")))

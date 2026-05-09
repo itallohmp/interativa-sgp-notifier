@@ -23,7 +23,7 @@ class OccurrenceService:
         mensagem = formatar_ocorrencias(ocorrencias, periodo="hoje")
         return self.telegram_client.enviar_mensagem(mensagem)
 
-    def enviar_ocorrencias_para_chat(self, chat_id: int | str, periodo: str):
+    def enviar_ocorrencias_para_chat(self, chat_id: int | str, periodo: str, user_id: int | str = None, user_name: str | None = None):
         if periodo == "hoje":
             ocorrencias = self.listar_ocorrencias_abertas_do_dia()
         elif periodo == "d7":
@@ -33,5 +33,5 @@ class OccurrenceService:
         else:
             raise ValueError(f"Período inválido: {periodo}")
 
-        mensagem = formatar_ocorrencias(ocorrencias, chat_id, periodo=periodo)
+        mensagem = formatar_ocorrencias(ocorrencias, chat_id, periodo=periodo, user_id=user_id, user_name=user_name)
         return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
