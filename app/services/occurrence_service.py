@@ -33,5 +33,5 @@ class OccurrenceService:
         else:
             raise ValueError(f"Período inválido: {periodo}")
 
-        mensagem = formatar_ocorrencias(ocorrencias, chat_id, periodo=periodo, user_id=user_id, user_name=user_name)
+        mensagem = formatar_ocorrencias(ocorrencias, periodo=periodo, user_id=user_id, user_name=user_name)
         return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
