@@ -29,15 +29,21 @@ class SGPClient:
 
     def listar_ordens_servico_do_dia(self) -> list:
         hoje = date.today().strftime("%Y-%m-%d")
-        return self._buscar_os(data_inicial=hoje)
+        return self._buscar_os(
+            data_inicial=hoje, data_final=hoje
+            )
 
     def listar_ordens_servico_d7(self) -> list:
         hoje = date.today().strftime("%Y-%m-%d")
         d7 = (date.today() - timedelta(days=7)).strftime("%Y-%m-%d")
-        return self._buscar_os(data_inicial=d7, data_final=hoje)
+        return self._buscar_os(
+            data_inicial=d7, data_final=hoje
+            )
     
     def listar_ordens_amanha(self) -> list:
-        hoje = date.today()              
-        amanha = hoje + timedelta(days=1)  
-        amanha_str = amanha.strftime("%Y-%m-%d")  
-        return self._buscar_os(data_inicial=amanha_str)
+        amanha = (date.today() + timedelta(days=1)).strftime("%Y-%m-%d")
+
+        return self._buscar_os(
+            data_inicial=amanha,
+            data_final=amanha
+            )
