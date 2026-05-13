@@ -1,6 +1,10 @@
 from app.integrations.sgp_client import SGPClient
 from app.integrations.telegram_client import TelegramClient
 from app.utils.formatter import formatar_ocorrencias
+from app.config import settings
+from fastapi import BackgroundTasks
+
+import httpx
 
 
 class OccurrenceService:
@@ -35,3 +39,68 @@ class OccurrenceService:
 
         mensagem = formatar_ocorrencias(ocorrencias, periodo=periodo, user_id=user_id, user_name=user_name)
         return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+    
+    def configurar_webhook(self):
+        webhook_url = f"{settings.PUBLIC_URL}/interativa-api/webhook"
+
+        url = (
+            f"https://api.telegram.org/bot"
+            f"{settings.TELEGRAM_BOT_TOKEN}/setWebhook"
+        )
+
+        response = httpx.post(url, json={"url": webhook_url})
+
+        return response.json()
+
+    async def processar_webhook(self, update: dict, background: BackgroundTasks):
+
+        if "callback_query" in update:
+
+            callback = update["callback_query"]
+            callback_id = callback["id"]
+            data = callback["data"]
+            chat_id = callback["message"]["chat"]["id"]
+            user_id = callback["from"]["id"]
+            user_name = (callback["from"].get("first_name")
+                or callback["from"].get("username")
+            )
+
+            self.telegram_client.answer_callback_query(
+                callback_id,
+                texto="Buscando OS..."
+            )
+
+            mapa_periodos = {
+                "os_dia": "hoje",
+                "os_d7": "d7",
+                "amanha": "amanha",
+            }
+
+            periodo = mapa_periodos.get(data)
+
+            if periodo:
+                background.add_task(
+                    self.enviar_ocorrencias_para_chat,
+                    chat_id,
+                    periodo,
+                    user_id,
+                    user_name
+                )
+
+            return {"ok": True}
+
+        if "message" in update:
+            mensagem = update["message"]
+            chat_id = mensagem["chat"]["id"]
+            texto = mensagem.get("text", "")
+
+            if texto in ("/menu", "/os"):
+
+                background.add_task(
+                    self.telegram_client.enviar_menu,
+                    chat_id=chat_id
+                )
+
+            return {"ok": True}
+
+        return {"ok": True}
