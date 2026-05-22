@@ -30,7 +30,7 @@ def home():
     return {"message": "API online"}
 
 
-@app.get("/ocorrencias/abertas")
+@app.get("/ocorrencias/abertas")s
 def listar_ocorrencias_abertas():
     return service.listar_ocorrencias_abertas_do_dia()
 
