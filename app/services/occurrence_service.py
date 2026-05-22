@@ -3,7 +3,7 @@ from app.integrations.telegram_client import TelegramClient
 from app.utils.formatter import formatar_ocorrencias
 from app.config import settings
 from fastapi import BackgroundTasks
-
+import time
 import httpx
 
 
@@ -28,6 +28,7 @@ class OccurrenceService:
         return self.telegram_client.enviar_mensagem(mensagem)
 
     def enviar_ocorrencias_para_chat(self, chat_id: int | str, periodo: str, user_id: int | str = None, user_name: str | None = None):
+        
         if periodo == "hoje":
             ocorrencias = self.listar_ocorrencias_abertas_do_dia()
         elif periodo == "d7":
@@ -36,9 +37,12 @@ class OccurrenceService:
             ocorrencias = self.listar_ocorrencias_amanha()
         else:
             raise ValueError(f"Período inválido: {periodo}")
-
+        inicio = time.time()
         mensagem = formatar_ocorrencias(ocorrencias, periodo=periodo, user_id=user_id, user_name=user_name)
+        fim = time.time()
+        print(f"Rota inteira demorou: {fim - inicio:.2f} segundos")
         return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+        
     
     def configurar_webhook(self):
         webhook_url = f"{settings.PUBLIC_URL}/interativa-api/webhook"
