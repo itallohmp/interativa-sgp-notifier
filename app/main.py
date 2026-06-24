@@ -48,7 +48,7 @@ def enviar_menu():
 
 @app.post("/configurar-webhook")
 def configurar_webhook():
-    return service.configurar_hook()
+    return service.configurar_webhook()
 
 
 @app.post("/webhook")
