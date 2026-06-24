@@ -1,9 +1,10 @@
-from fastapi import FastAPI, Request, BackgroundTasks
-from app.services.occurrence_service import OccurrenceService
+import httpx
+from fastapi import BackgroundTasks, FastAPI, Request
+
+from app.config import settings
 from app.integrations.telegram_client import TelegramClient
 from app.scheduler import iniciar_scheduler
-from app.config import settings
-import httpx
+from app.services.occurrence_service import OccurrenceService
 
 description = """
 ## Sistema de Notificação de Ocorrências SGP
@@ -13,7 +14,7 @@ API desenvolvida para integrar o **SGP** ao **Telegram**.
 
 app = FastAPI(
     title="Interativa Ocorrências API",
-    root_path="/interativa-api",
+    root_path="/",
     description=description,
     version="1.0.0",
     contact={"name": "Itallo Polito", "url": "https://itallohmp.pythonanywhere.com/"},
@@ -54,4 +55,3 @@ def configurar_webhook():
 async def webhook(request: Request, background: BackgroundTasks):
     update = await request.json()
     return await service.processar_webhook(update, background)
-    
