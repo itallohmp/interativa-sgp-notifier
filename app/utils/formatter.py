@@ -41,14 +41,21 @@ def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje", user_id
         endereco_logradouro = html.escape(str(ocorrencia.get("endereco_logradouro", "N/A")))
         os_motivo_descricao = html.escape(str(ocorrencia.get("os_motivo_descricao", "N/A")))
 
+        # equipe técnica designada
+        equipe = html.escape(
+            str(ocorrencia.get("os_tecnico_responsavel") or "Não designado")
+        )
+
         mensagem += (
             f"📌 <b>{i}. Cliente:</b> {cliente}\n"
+            f"<b>OS:</b> #{html.escape(str(ocorrencia.get('os_id', 'N/A')))}\n"
             f"<b>Horário:</b> {os_data_agendamento}\n"
             f"<b>Cidade:</b> {cidade}\n"
             f"<b>Bairro:</b> {bairro}\n"
             f"<b>Rua:</b> {endereco_logradouro}\n"
             f"<b>Número:</b> {endereco_numero}\n"
-            f"⚠️ <b>Motivo:</b> {os_motivo_descricao}\n\n"
+            f"⚠️ <b>Motivo:</b> {os_motivo_descricao}\n"
+            f"👷 <b>Equipe técnica:</b> {equipe}\n\n"
 
         )
 

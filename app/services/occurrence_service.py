@@ -1,3 +1,4 @@
+import html
 import time
 
 import httpx
@@ -52,6 +53,55 @@ class OccurrenceService:
         print(f"Rota inteira demorou: {fim - inicio:.2f} segundos")
         return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
 
+    def iniciar_designacao(self, chat_id: int | str):
+        """Passo 1: manda a lista de OS em aberto para escolher."""
+        ocorrencias = self.listar_ocorrencias_abertas_do_dia()
+        return self.telegram_client.enviar_selecao_os(chat_id, ocorrencias)
+
+    def escolher_equipe(self, chat_id: int | str, os_id: int):
+        """Passo 2: manda as equipes disponíveis para aquela OS."""
+        ocorrencia = self.sgp_client.buscar_os_por_id(os_id)
+        if not ocorrencia:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, f"OS #{os_id} não encontrada."
+            )
+
+        tecnicos = self.sgp_client.listar_tecnicos()
+        return self.telegram_client.enviar_selecao_equipe(
+            chat_id, os_id, ocorrencia, tecnicos
+        )
+
+    def aplicar_designacao(
+        self,
+        chat_id: int | str,
+        os_id: int,
+        tecnico: str,
+        user_name: str | None = None,
+    ):
+        """Passo 3: grava no SGP e confirma no grupo."""
+        anterior = self.sgp_client.buscar_os_por_id(os_id) or {}
+        equipe_anterior = anterior.get("os_tecnico_responsavel") or "Não designado"
+
+        try:
+            self.sgp_client.designar_equipe(os_id, tecnico)
+        except httpx.HTTPError as erro:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, f"❌ Falha ao designar a OS #{os_id}: {erro}"
+            )
+
+        # relê para confirmar o que o SGP de fato gravou
+        atualizada = self.sgp_client.buscar_os_por_id(os_id) or {}
+        equipe_nova = atualizada.get("os_tecnico_responsavel") or tecnico
+
+        mensagem = (
+            f"✅ <b>OS #{os_id} redesignada</b>\n"
+            f"<b>Cliente:</b> {html.escape(str(atualizada.get('cliente', 'N/A')))}\n"
+            f"<b>De:</b> {html.escape(str(equipe_anterior))}\n"
+            f"<b>Para:</b> {html.escape(str(equipe_nova))}\n"
+            f"<b>Por:</b> {html.escape(str(user_name or 'desconhecido'))}"
+        )
+        return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+
     def configurar_webhook(self):
         webhook_url = f"{settings.PUBLIC_URL}/webhook"
 
@@ -76,10 +126,6 @@ class OccurrenceService:
                 "username"
             )
 
-            self.telegram_client.answer_callback_query(
-                callback_id, texto="Buscando OS..."
-            )
-
             mapa_periodos = {
                 "os_dia": "hoje",
                 "os_d7": "d7",
@@ -89,6 +135,9 @@ class OccurrenceService:
             periodo = mapa_periodos.get(data)
 
             if periodo:
+                self.telegram_client.answer_callback_query(
+                    callback_id, texto="Buscando OS..."
+                )
                 background.add_task(
                     self.enviar_ocorrencias_para_chat,
                     chat_id,
@@ -96,6 +145,35 @@ class OccurrenceService:
                     user_id,
                     user_name,
                 )
+
+            elif data == "designar":
+                self.telegram_client.answer_callback_query(
+                    callback_id, texto="Carregando ocorrências..."
+                )
+                background.add_task(self.iniciar_designacao, chat_id)
+
+            elif data.startswith("os:"):
+                os_id = int(data.split(":", 1)[1])
+                self.telegram_client.answer_callback_query(
+                    callback_id, texto="Carregando equipes..."
+                )
+                background.add_task(self.escolher_equipe, chat_id, os_id)
+
+            elif data.startswith("eq:"):
+                _, os_id, tecnico = data.split(":", 2)
+                self.telegram_client.answer_callback_query(
+                    callback_id, texto="Designando..."
+                )
+                background.add_task(
+                    self.aplicar_designacao,
+                    chat_id,
+                    int(os_id),
+                    tecnico,
+                    user_name,
+                )
+
+            else:
+                self.telegram_client.answer_callback_query(callback_id)
 
             return {"ok": True}
 
@@ -108,8 +186,9 @@ class OccurrenceService:
 
                 background.add_task(self.telegram_client.enviar_menu, chat_id=chat_id)
 
+            elif texto.startswith("/designar"):
+                background.add_task(self.iniciar_designacao, chat_id)
+
             return {"ok": True}
 
-        return {"ok": True}
-        return {"ok": True}
         return {"ok": True}

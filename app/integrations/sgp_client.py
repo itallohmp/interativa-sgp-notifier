@@ -47,3 +47,55 @@ class SGPClient:
             data_inicial=amanha,
             data_final=amanha
             )
+
+    def listar_tecnicos(self) -> list:
+        """Equipes técnicas cadastradas no SGP: id, username e nome."""
+        url = f"{self.base_url}/api/ura/tecnicos/"
+
+        response = httpx.post(
+            url,
+            json={"app": self.app, "token": self.token},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def buscar_os_por_id(self, os_id: int) -> dict | None:
+        url = f"{self.base_url}/api/os/list/id/{os_id}"
+
+        response = httpx.post(
+            url,
+            json={"app": self.app, "token": self.token},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+
+        dados = response.json()
+        if isinstance(dados, list):
+            return dados[0] if dados else None
+        return dados
+
+    def designar_equipe(self, os_id: int, tecnico: str) -> dict:
+        """
+        Redesigna a OS para outra equipe técnica.
+
+        Usa /api/central/chamado/update/, o único endpoint que aceita
+        os_tecnico_responsavel — /api/os/update/ não tem esse parâmetro.
+        Autentica com app+token (cpfcnpj+senha do cliente é alternativa,
+        não obrigatória).
+
+        `tecnico` é o username retornado por listar_tecnicos().
+        """
+        url = f"{self.base_url}/api/central/chamado/update/{os_id}/"
+
+        response = httpx.post(
+            url,
+            json={
+                "app": self.app,
+                "token": self.token,
+                "os_tecnico_responsavel": tecnico,
+            },
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        return response.json()
