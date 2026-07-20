@@ -51,7 +51,8 @@ class OccurrenceService:
         )
         fim = time.time()
         print(f"Rota inteira demorou: {fim - inicio:.2f} segundos")
-        return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+        teclado = [[{"text": "📋 Menu", "callback_data": "menu"}]]
+        return self.telegram_client._enviar_com_teclado(chat_id, mensagem, teclado)
 
     def iniciar_designacao(self, chat_id: int | str):
         """Passo 1: manda a lista de OS em aberto para escolher."""
