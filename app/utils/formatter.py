@@ -55,7 +55,7 @@ def formatar_ocorrencias(ocorrencias: list[dict], periodo: str = "hoje", user_id
             f"<b>Rua:</b> {endereco_logradouro}\n"
             f"<b>Número:</b> {endereco_numero}\n"
             f"⚠️ <b>Motivo:</b> {os_motivo_descricao}\n"
-            f"👷 <b>Equipe técnica:</b> {equipe}\n\n"
+            f"👷 <b>Equipe:</b> {equipe}\n\n"
 
         )
 
