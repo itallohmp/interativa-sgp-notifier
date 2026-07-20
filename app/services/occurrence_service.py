@@ -100,7 +100,8 @@ class OccurrenceService:
             f"<b>Para:</b> {html.escape(str(equipe_nova))}\n"
             f"<b>Por:</b> {html.escape(str(user_name or 'desconhecido'))}"
         )
-        return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+        teclado = [[{"text": "📋 Menu", "callback_data": "menu"}]]
+        return self.telegram_client._enviar_com_teclado(chat_id, mensagem, teclado)
 
     def configurar_webhook(self):
         webhook_url = f"{settings.PUBLIC_URL}/webhook"
@@ -144,6 +145,12 @@ class OccurrenceService:
                     periodo,
                     user_id,
                     user_name,
+                )
+
+            elif data == "menu":
+                self.telegram_client.answer_callback_query(callback_id)
+                background.add_task(
+                    self.telegram_client.enviar_menu, chat_id=chat_id
                 )
 
             elif data == "designar":
