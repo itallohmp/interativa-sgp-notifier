@@ -54,11 +54,24 @@ class TelegramClient:
         response.raise_for_status()
         return response.json()
 
-    def enviar_selecao_os(self, chat_id: int | str, ocorrencias: list):
-        """Passo 1: escolher qual OS será redesignada."""
+    def enviar_periodo_designacao(self, chat_id: int | str):
+        """Passo 1: escolher o período (dia ou amanhã) das OS a designar."""
+        teclado = [
+            [{"text": "📋 OS do Dia", "callback_data": "dsg:hoje"}],
+            [{"text": "📅 OS de Amanhã", "callback_data": "dsg:amanha"}],
+        ]
+        return self._enviar_com_teclado(
+            chat_id,
+            "🔧 <b>Designar / Reagendar</b>\n\nEscolha o período:",
+            teclado,
+        )
+
+    def enviar_selecao_os(self, chat_id: int | str, ocorrencias: list, periodo: str = "hoje"):
+        """Passo 2: escolher qual OS será tratada."""
+        rotulo = "de amanhã" if periodo == "amanha" else "do dia"
         if not ocorrencias:
             return self.enviar_mensagem_para(
-                chat_id, "Nenhuma ocorrência em aberto para designar."
+                chat_id, f"Nenhuma ocorrência em aberto {rotulo}."
             )
 
         teclado = []
@@ -81,12 +94,41 @@ class TelegramClient:
 
         return self._enviar_com_teclado(
             chat_id,
-            f"👷 <b>Designar Equipe</b>\n\nEscolha a ocorrência:{rodape}",
+            f"🔧 <b>Designar / Reagendar</b>\n\nEscolha a ocorrência:{rodape}",
+            teclado,
+        )
+
+    def enviar_acoes_os(self, chat_id: int | str, os_id: int, ocorrencia: dict):
+        """Passo 3: escolher entre trocar equipe ou trocar horário."""
+        import html as _html
+
+        cliente = _html.escape(str(ocorrencia.get("cliente", "N/A")))
+        equipe = _html.escape(
+            str(ocorrencia.get("os_tecnico_responsavel") or "Não designado")
+        )
+        ag = str(ocorrencia.get("os_data_agendamento", ""))
+        quando = (
+            f"{ag[8:10]}/{ag[5:7]}/{ag[0:4]} {ag[11:16]}" if len(ag) >= 16 else "N/A"
+        )
+
+        teclado = [
+            [{"text": "👷 Trocar Equipe", "callback_data": f"eql:{os_id}"}],
+            [{"text": "🕐 Trocar Horário", "callback_data": f"hr:{os_id}"}],
+        ]
+        return self._enviar_com_teclado(
+            chat_id,
+            (
+                f"🔧 <b>OS #{os_id}</b>\n"
+                f"<b>Cliente:</b> {cliente}\n"
+                f"<b>Equipe:</b> {equipe}\n"
+                f"<b>Agendamento:</b> {quando}\n\n"
+                f"O que deseja fazer?"
+            ),
             teclado,
         )
 
     def enviar_selecao_equipe(self, chat_id: int | str, os_id: int, ocorrencia: dict, tecnicos: list):
-        """Passo 2: escolher a equipe de destino."""
+        """Escolher a equipe de destino."""
         import html as _html
 
         cliente = _html.escape(str(ocorrencia.get("cliente", "N/A")))
