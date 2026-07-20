@@ -1,4 +1,5 @@
 import html
+import re
 import time
 from datetime import date, datetime
 
@@ -12,11 +13,13 @@ from app.utils.formatter import formatar_ocorrencias
 
 
 class OccurrenceService:
+    # marcador usado na pergunta de horário e lido de volta na resposta
+    _MARCADOR_REAGENDAR = "Reagendar OS #{os_id}"
+    _REGEX_REAGENDAR = re.compile(r"Reagendar OS #(\d+)")
+
     def __init__(self):
         self.sgp_client = SGPClient()
         self.telegram_client = TelegramClient()
-        # quem está digitando um novo horário: "chat_id:user_id" -> os_id
-        self._aguardando_horario: dict[str, int] = {}
 
     def listar_ocorrencias_abertas_do_dia(self) -> list:
         return self.sgp_client.listar_ordens_servico_do_dia()
@@ -124,23 +127,23 @@ class OccurrenceService:
         teclado = [[{"text": "📋 Menu", "callback_data": "menu"}]]
         return self.telegram_client._enviar_com_teclado(chat_id, mensagem, teclado)
 
-    def pedir_horario(
-        self,
-        chat_id: int | str,
-        user_id: int | str,
-        os_id: int,
-    ):
-        """Guarda o estado e pede o novo horário por texto."""
-        self._aguardando_horario[f"{chat_id}:{user_id}"] = os_id
-        return self.telegram_client.enviar_mensagem_para(
+    def pedir_horario(self, chat_id: int | str, os_id: int):
+        """Pede o novo horário com ForceReply (resposta chega mesmo no grupo)."""
+        marcador = self._MARCADOR_REAGENDAR.format(os_id=os_id)
+        return self.telegram_client.enviar_forcando_resposta(
             chat_id,
             (
-                f"🕐 <b>Reagendar OS #{os_id}</b>\n\n"
-                f"Envie a nova data e hora no formato:\n"
+                f"🕐 <b>{marcador}</b>\n\n"
+                f"Responda esta mensagem com a nova data e hora:\n"
                 f"<code>DD/MM/AAAA HH:MM</code>\n"
                 f"Exemplo: <code>21/07/2026 14:30</code>"
             ),
         )
+
+    def os_id_de_reagendamento(self, reply_text: str) -> int | None:
+        """Extrai o os_id do texto da mensagem respondida, se for a pergunta."""
+        achado = self._REGEX_REAGENDAR.search(reply_text or "")
+        return int(achado.group(1)) if achado else None
 
     def _parse_datetime(self, texto: str) -> str | None:
         """Converte o texto do usuário em 'AAAA-MM-DD HH:MM:SS' ou None."""
@@ -159,23 +162,21 @@ class OccurrenceService:
     def aplicar_horario(
         self,
         chat_id: int | str,
-        user_id: int | str,
+        os_id: int,
         texto: str,
         user_name: str | None = None,
     ):
-        """Recebe o horário digitado, grava no SGP e confirma."""
-        chave = f"{chat_id}:{user_id}"
-        os_id = self._aguardando_horario.get(chave)
-        if os_id is None:
-            return None
-
+        """Recebe o horário respondido, grava no SGP e confirma."""
         quando = self._parse_datetime(texto)
         if not quando:
-            return self.telegram_client.enviar_mensagem_para(
+            # mantém o marcador para que a nova resposta ainda traga o os_id
+            marcador = self._MARCADOR_REAGENDAR.format(os_id=os_id)
+            return self.telegram_client.enviar_forcando_resposta(
                 chat_id,
                 (
-                    "❌ Formato inválido. Envie <code>DD/MM/AAAA HH:MM</code>, "
-                    "ex.: <code>21/07/2026 14:30</code>"
+                    f"❌ Formato inválido — <b>{marcador}</b>\n\n"
+                    f"Responda com <code>DD/MM/AAAA HH:MM</code>, "
+                    f"ex.: <code>21/07/2026 14:30</code>"
                 ),
             )
 
@@ -190,12 +191,9 @@ class OccurrenceService:
         try:
             self.sgp_client.alterar_agendamento(os_id, quando)
         except httpx.HTTPError as erro:
-            self._aguardando_horario.pop(chave, None)
             return self.telegram_client.enviar_mensagem_para(
                 chat_id, f"❌ Falha ao reagendar a OS #{os_id}: {erro}"
             )
-
-        self._aguardando_horario.pop(chave, None)
 
         atual = self.sgp_client.buscar_os_por_id(os_id) or {}
         ag_novo = str(atual.get("os_data_agendamento", ""))
@@ -291,7 +289,7 @@ class OccurrenceService:
             elif data.startswith("hr:"):
                 os_id = int(data.split(":", 1)[1])
                 self.telegram_client.answer_callback_query(callback_id)
-                background.add_task(self.pedir_horario, chat_id, user_id, os_id)
+                background.add_task(self.pedir_horario, chat_id, os_id)
 
             elif data.startswith("eq:"):
                 _, os_id, tecnico = data.split(":", 2)
@@ -316,22 +314,21 @@ class OccurrenceService:
             chat_id = mensagem["chat"]["id"]
             texto = mensagem.get("text", "")
             de = mensagem.get("from", {})
-            user_id = de.get("id")
             user_name = de.get("first_name") or de.get("username")
-            chave = f"{chat_id}:{user_id}"
+            reply_text = (mensagem.get("reply_to_message") or {}).get("text", "")
 
             if texto in ("/menu", "/os"):
-                self._aguardando_horario.pop(chave, None)
                 background.add_task(self.telegram_client.enviar_menu, chat_id=chat_id)
 
             elif texto.startswith("/designar"):
-                self._aguardando_horario.pop(chave, None)
                 background.add_task(self.iniciar_designacao, chat_id)
 
-            elif chave in self._aguardando_horario:
-                background.add_task(
-                    self.aplicar_horario, chat_id, user_id, texto, user_name
-                )
+            else:
+                os_id = self.os_id_de_reagendamento(reply_text)
+                if os_id is not None:
+                    background.add_task(
+                        self.aplicar_horario, chat_id, os_id, texto, user_name
+                    )
 
             return {"ok": True}
 

@@ -22,6 +22,25 @@ class TelegramClient:
         response.raise_for_status()
         return response.json()
 
+    def enviar_forcando_resposta(self, chat_id: int | str, mensagem: str):
+        """
+        Envia pedindo resposta (ForceReply). Necessário em grupo com privacy
+        mode ligado: só mensagens de texto que sejam RESPOSTA ao bot chegam ao
+        webhook — texto solto não chega.
+        """
+        url = f"{self.base_url}/sendMessage"
+        payload = {
+            "chat_id": chat_id,
+            "text": mensagem,
+            "parse_mode": "HTML",
+            "reply_markup": {
+                "force_reply": True,
+                "input_field_placeholder": "21/07/2026 14:30",
+            },
+        }
+        response = httpx.post(url, json=payload, timeout=30.0)
+        response.raise_for_status()
+        return response.json()
 
     def enviar_menu(self, chat_id: int | str = None):
         url = f"{self.base_url}/sendMessage"
