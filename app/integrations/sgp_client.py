@@ -75,27 +75,27 @@ class SGPClient:
             return dados[0] if dados else None
         return dados
 
-    def designar_equipe(self, os_id: int, tecnico: str) -> dict:
+    def _chamado_update(self, os_id: int, campos: dict) -> dict:
         """
-        Redesigna a OS para outra equipe técnica.
-
-        Usa /api/central/chamado/update/, o único endpoint que aceita
-        os_tecnico_responsavel — /api/os/update/ não tem esse parâmetro.
-        Autentica com app+token (cpfcnpj+senha do cliente é alternativa,
-        não obrigatória).
-
-        `tecnico` é o username retornado por listar_tecnicos().
+        Altera uma OS via /api/central/chamado/update/, o único endpoint que
+        aceita os_tecnico_responsavel e os_data_agendamento — /api/os/update/
+        não tem esses parâmetros. Autentica com app+token (cpfcnpj+senha do
+        cliente é alternativa, não obrigatória).
         """
         url = f"{self.base_url}/api/central/chamado/update/{os_id}/"
 
         response = httpx.post(
             url,
-            json={
-                "app": self.app,
-                "token": self.token,
-                "os_tecnico_responsavel": tecnico,
-            },
+            json={"app": self.app, "token": self.token, **campos},
             timeout=30.0,
         )
         response.raise_for_status()
         return response.json()
+
+    def designar_equipe(self, os_id: int, tecnico: str) -> dict:
+        """Redesigna a OS para outra equipe. `tecnico` é o username."""
+        return self._chamado_update(os_id, {"os_tecnico_responsavel": tecnico})
+
+    def alterar_agendamento(self, os_id: int, quando: str) -> dict:
+        """Reagenda a OS. `quando` no formato 'AAAA-MM-DD HH:MM:SS'."""
+        return self._chamado_update(os_id, {"os_data_agendamento": quando})
