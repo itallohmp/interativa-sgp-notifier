@@ -34,6 +34,8 @@ class OccurrenceService:
         self.telegram_client = TelegramClient()
         # fluxo de criar OS por usuário: "chat_id:user_id" -> dict de estado
         self._criar_os_estado: dict[str, dict] = {}
+        # ids vistos interagindo (para montar a allowlist): user_id -> nome
+        self._usuarios_vistos: dict[int, str] = {}
 
     def listar_ocorrencias_abertas_do_dia(self) -> list:
         return self.sgp_client.listar_ordens_servico_do_dia()
@@ -477,6 +479,44 @@ class OccurrenceService:
             chat_id, mensagem, self._TECLADO_MENU
         )
 
+    def enviar_ids_grupo(self, chat_id: int | str):
+        """
+        Junta os administradores (getChatAdministrators) com quem já interagiu
+        e monta a linha pronta para TELEGRAM_ALLOWED_USER_IDS.
+        Obs.: o Telegram não permite listar TODOS os membros de um grupo.
+        """
+        ids: dict[int, str] = {}
+        linhas = []
+
+        for membro in self.telegram_client.listar_administradores(chat_id):
+            usuario = membro.get("user", {})
+            uid = usuario.get("id")
+            if not uid or usuario.get("is_bot"):
+                continue
+            nome = usuario.get("first_name") or usuario.get("username") or "?"
+            ids[uid] = nome
+            linhas.append(f"👑 {html.escape(nome)} — <code>{uid}</code>")
+
+        for uid, nome in self._usuarios_vistos.items():
+            if uid not in ids:
+                ids[uid] = nome
+                linhas.append(f"👤 {html.escape(nome or '?')} — <code>{uid}</code>")
+
+        if not ids:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "Nenhum id capturado ainda. Peça para a equipe usar o bot."
+            )
+
+        csv = ",".join(str(i) for i in ids)
+        mensagem = (
+            "🆔 <b>IDs do grupo</b>\n"
+            "(👑 admin · 👤 já interagiu — o Telegram não lista os demais)\n\n"
+            + "\n".join(linhas)
+            + "\n\n<b>Para o .env:</b>\n"
+            f"<code>TELEGRAM_ALLOWED_USER_IDS={csv}</code>"
+        )
+        return self.telegram_client.enviar_mensagem_para(chat_id, mensagem)
+
     def configurar_webhook(self):
         webhook_url = f"{settings.PUBLIC_URL}/webhook"
 
@@ -518,6 +558,14 @@ class OccurrenceService:
         chats = settings.allowed_chat_ids
         if chats and str(chat_id) not in chats:
             return False  # chat não autorizado: ignora em silêncio
+
+        # captura quem interage no chat autorizado (ajuda a montar a allowlist)
+        origem = update.get("callback_query") or update.get("message") or {}
+        frm = origem.get("from") or {}
+        if frm.get("id") and not frm.get("is_bot"):
+            self._usuarios_vistos[frm["id"]] = (
+                frm.get("first_name") or frm.get("username") or ""
+            )
 
         if texto in ("/meuid", "/id"):
             self.telegram_client.enviar_mensagem_para(
@@ -689,6 +737,9 @@ class OccurrenceService:
             elif texto.startswith("/designar"):
                 self._criar_os_estado.pop(chave, None)
                 background.add_task(self.iniciar_designacao, chat_id)
+
+            elif texto in ("/ids", "/grupo"):
+                background.add_task(self.enviar_ids_grupo, chat_id)
 
             elif texto.startswith("/cliente"):
                 if self._extrair_cpf(_arg()):

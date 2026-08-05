@@ -75,6 +75,13 @@ class TelegramClient:
         response.raise_for_status()
         return response.json()
 
+    def listar_administradores(self, chat_id: int | str) -> list:
+        """Administradores do grupo (com id). Único jeito de puxar ids em lote."""
+        url = f"{self.base_url}/getChatAdministrators"
+        response = httpx.get(url, params={"chat_id": chat_id}, timeout=15.0)
+        dados = response.json()
+        return dados.get("result", []) if dados.get("ok") else []
+
     def _enviar_com_teclado(self, chat_id, texto: str, teclado: list):
         url = f"{self.base_url}/sendMessage"
         payload = {
