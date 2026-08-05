@@ -9,7 +9,11 @@ from fastapi import BackgroundTasks
 from app.config import settings
 from app.integrations.sgp_client import SGPClient
 from app.integrations.telegram_client import TelegramClient
-from app.utils.formatter import formatar_ocorrencias
+from app.utils.formatter import (
+    formatar_cliente,
+    formatar_faturas,
+    formatar_ocorrencias,
+)
 
 
 class OccurrenceService:
@@ -19,9 +23,17 @@ class OccurrenceService:
     # prazo para responder o reagendamento; depois disso volta ao menu
     _PRAZO_REAGENDAR_SEGUNDOS = 15 * 60
 
+    # motivos disponíveis ao criar OS: codigo -> (rótulo, ocorrenciatipo)
+    _MOTIVOS_OS = {
+        30: ("Acesso Lento", 3),
+        40: ("LOS", 2),
+    }
+
     def __init__(self):
         self.sgp_client = SGPClient()
         self.telegram_client = TelegramClient()
+        # fluxo de criar OS por usuário: "chat_id:user_id" -> dict de estado
+        self._criar_os_estado: dict[str, dict] = {}
 
     def listar_ocorrencias_abertas_do_dia(self) -> list:
         return self.sgp_client.listar_ordens_servico_do_dia()
@@ -233,6 +245,238 @@ class OccurrenceService:
         teclado = [[{"text": "📋 Menu", "callback_data": "menu"}]]
         return self.telegram_client._enviar_com_teclado(chat_id, mensagem, teclado)
 
+    # ------------------------------------------------------------------ #
+    #  Consulta de cliente / faturas / criação de OS por CPF
+    # ------------------------------------------------------------------ #
+
+    _TECLADO_MENU = [[{"text": "📋 Menu", "callback_data": "menu"}]]
+
+    def _extrair_cpf(self, texto: str) -> str | None:
+        """Extrai só os dígitos; CPF=11, CNPJ=14."""
+        digitos = re.sub(r"\D", "", texto or "")
+        return digitos if len(digitos) in (11, 14) else None
+
+    def pedir_cpf(self, chat_id: int | str, marcador: str):
+        """Pede o CPF com ForceReply (chega ao webhook mesmo no grupo)."""
+        return self.telegram_client.enviar_forcando_resposta(
+            chat_id,
+            f"{marcador}\n\nResponda com o <b>CPF/CNPJ</b> do cliente.",
+        )
+
+    def consulta_cliente(self, chat_id: int | str, cpf_texto: str):
+        cpf = self._extrair_cpf(cpf_texto)
+        if not cpf:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "❌ CPF/CNPJ inválido. Envie 11 (CPF) ou 14 (CNPJ) dígitos."
+            )
+        contratos = self.sgp_client.consultar_cliente(cpf)
+        ocs = {}
+        for c in contratos:
+            status = str(c.get("contratoStatusDisplay") or "").lower()
+            if "cancel" not in status:
+                ocs[c.get("contratoId")] = self.sgp_client.listar_ocorrencias_contrato(
+                    c.get("contratoId")
+                )
+        mensagem = formatar_cliente(contratos, ocs)
+        return self.telegram_client._enviar_com_teclado(
+            chat_id, mensagem, self._TECLADO_MENU
+        )
+
+    def enviar_faturas(self, chat_id: int | str, cpf_texto: str):
+        cpf = self._extrair_cpf(cpf_texto)
+        if not cpf:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "❌ CPF/CNPJ inválido. Envie 11 (CPF) ou 14 (CNPJ) dígitos."
+            )
+        contratos = self.sgp_client.consultar_cliente(cpf)
+        if not contratos:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "🔎 Nenhum cliente encontrado para esse CPF/CNPJ."
+            )
+        blocos = [
+            {
+                "contrato": c.get("contratoId"),
+                "faturas": self.sgp_client.listar_faturas_abertas(c.get("contratoId")),
+            }
+            for c in contratos
+        ]
+        mensagem = formatar_faturas(blocos)
+        return self.telegram_client._enviar_com_teclado(
+            chat_id, mensagem, self._TECLADO_MENU
+        )
+
+    def iniciar_criar_os(self, chat_id: int | str, cpf_texto: str):
+        cpf = self._extrair_cpf(cpf_texto)
+        if not cpf:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "❌ CPF/CNPJ inválido. Envie 11 (CPF) ou 14 (CNPJ) dígitos."
+            )
+        contratos = self.sgp_client.consultar_cliente(cpf)
+        ativos = [
+            c
+            for c in contratos
+            if "cancel" not in str(c.get("contratoStatusDisplay") or "").lower()
+        ]
+        if not ativos:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "🔎 Nenhum contrato ativo encontrado para esse CPF/CNPJ."
+            )
+        if len(ativos) == 1:
+            return self.criar_os_escolher_motivo(chat_id, ativos[0]["contratoId"])
+
+        teclado = [
+            [
+                {
+                    "text": f"Contrato {c.get('contratoId')} · {str(c.get('planointernet') or '')[:18]}",
+                    "callback_data": f"cosc:{c.get('contratoId')}",
+                }
+            ]
+            for c in ativos
+        ]
+        return self.telegram_client._enviar_com_teclado(
+            chat_id, "🆕 <b>Criar OS</b>\n\nEscolha o contrato:", teclado
+        )
+
+    def criar_os_escolher_motivo(self, chat_id: int | str, contrato: int):
+        # mostra a(s) ocorrência(s) aberta(s) com a descrição (pedido do usuário)
+        ocs = self.sgp_client.listar_ocorrencias_contrato(contrato)
+        aviso = ""
+        if ocs:
+            linhas = "\n".join(
+                f"• {o.get('numero')} — "
+                f"{html.escape(str(o.get('conteudo') or o.get('tipo') or ''))} "
+                f"(OS: {len(o.get('ordens_servicos', []))})"
+                for o in ocs[:5]
+            )
+            aviso = (
+                "\n\n⚠️ <b>Já há ocorrência aberta neste contrato:</b>\n"
+                f"{linhas}\n"
+                "<i>Uma ocorrência NOVA será criada — o SGP não anexa à existente. "
+                "Feche a anterior no SGP se necessário.</i>"
+            )
+        teclado = [
+            [{"text": "📉 Acesso Lento", "callback_data": f"cosm:{contrato}:30"}],
+            [{"text": "🔴 LOS", "callback_data": f"cosm:{contrato}:40"}],
+        ]
+        return self.telegram_client._enviar_com_teclado(
+            chat_id,
+            f"🆕 <b>Criar OS — Contrato {contrato}</b>{aviso}\n\nEscolha o <b>motivo</b>:",
+            teclado,
+        )
+
+    def criar_os_escolher_equipe(self, chat_id: int | str, contrato: int, motivo: int):
+        rotulo = self._MOTIVOS_OS.get(motivo, ("?", 5))[0]
+        tecnicos = self.sgp_client.listar_tecnicos()
+        teclado = []
+        for t in tecnicos:
+            username = t.get("username")
+            if not username:
+                continue
+            nome = t.get("nome") or username
+            teclado.append(
+                [
+                    {
+                        "text": f"👷 {nome}",
+                        "callback_data": f"cose:{contrato}:{motivo}:{username}",
+                    }
+                ]
+            )
+        if not teclado:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, "Nenhuma equipe técnica cadastrada no SGP."
+            )
+        return self.telegram_client._enviar_com_teclado(
+            chat_id,
+            f"🆕 <b>Contrato {contrato}</b> · Motivo: {rotulo}\n\nEscolha a <b>equipe</b>:",
+            teclado,
+        )
+
+    def criar_os_pedir_data(
+        self,
+        chat_id: int | str,
+        user_id: int | str,
+        contrato: int,
+        motivo: int,
+        equipe: str,
+    ):
+        self._criar_os_estado[f"{chat_id}:{user_id}"] = {
+            "contrato": contrato,
+            "motivo": motivo,
+            "equipe": equipe,
+            "step": "data",
+        }
+        return self.telegram_client.enviar_forcando_resposta(
+            chat_id,
+            (
+                "🆕 <b>Agendamento da nova OS</b>\n\n"
+                "Responda com a <b>data e hora</b>:\n"
+                "<code>DD/MM/AAAA HH:MM</code>\n"
+                "Exemplo: <code>06/08/2026 14:30</code>"
+            ),
+        )
+
+    def criar_os_receber_texto(
+        self,
+        chat_id: int | str,
+        user_id: int | str,
+        texto: str,
+        user_name: str | None = None,
+    ):
+        chave = f"{chat_id}:{user_id}"
+        estado = self._criar_os_estado.get(chave)
+        if not estado:
+            return None
+
+        if estado["step"] == "data":
+            quando = self._parse_datetime(texto)
+            if not quando:
+                return self.telegram_client.enviar_forcando_resposta(
+                    chat_id,
+                    "❌ Formato inválido. Responda <code>DD/MM/AAAA HH:MM</code>, "
+                    "ex.: <code>06/08/2026 14:30</code>",
+                )
+            estado["data"] = quando[:16]  # 'AAAA-MM-DD HH:MM'
+            estado["step"] = "obs"
+            return self.telegram_client.enviar_forcando_resposta(
+                chat_id,
+                "📝 Responda com uma <b>observação</b> para a OS "
+                "(ou <code>-</code> para pular).",
+            )
+
+        # step == "obs" -> cria a OS
+        obs = "" if texto.strip() in ("-", "") else texto.strip()
+        self._criar_os_estado.pop(chave, None)
+        rotulo, ocorrenciatipo = self._MOTIVOS_OS.get(estado["motivo"], ("OS", 5))
+        try:
+            resp = self.sgp_client.criar_os(
+                contrato=estado["contrato"],
+                motivoos=estado["motivo"],
+                ocorrenciatipo=ocorrenciatipo,
+                responsavel=estado["equipe"],
+                data_hora_agendamento=estado["data"],
+                observacao=obs,
+                conteudo=f"OS ({rotulo}) aberta via bot",
+            )
+        except httpx.HTTPError as erro:
+            return self.telegram_client.enviar_mensagem_para(
+                chat_id, f"❌ Falha ao criar a OS: {erro}"
+            )
+
+        protocolo = resp.get("protocolo") if isinstance(resp, dict) else None
+        mensagem = (
+            f"✅ <b>OS criada</b>\n"
+            f"<b>Contrato:</b> {estado['contrato']}\n"
+            f"<b>Motivo:</b> {rotulo}\n"
+            f"<b>Equipe:</b> {html.escape(str(estado['equipe']))}\n"
+            f"<b>Agendada:</b> {html.escape(estado['data'])}\n"
+        )
+        if protocolo:
+            mensagem += f"<b>Protocolo:</b> {html.escape(str(protocolo))}\n"
+        mensagem += f"<b>Por:</b> {html.escape(str(user_name or 'desconhecido'))}"
+        return self.telegram_client._enviar_com_teclado(
+            chat_id, mensagem, self._TECLADO_MENU
+        )
+
     def configurar_webhook(self):
         webhook_url = f"{settings.PUBLIC_URL}/webhook"
 
@@ -324,6 +568,48 @@ class OccurrenceService:
                     user_name,
                 )
 
+            elif data == "cliente":
+                self.telegram_client.answer_callback_query(callback_id)
+                background.add_task(
+                    self.pedir_cpf, chat_id, "🔎 <b>Consultar Cliente</b>"
+                )
+
+            elif data == "faturas":
+                self.telegram_client.answer_callback_query(callback_id)
+                background.add_task(
+                    self.pedir_cpf, chat_id, "💰 <b>Faturas do Cliente</b>"
+                )
+
+            elif data == "criaros":
+                self.telegram_client.answer_callback_query(callback_id)
+                background.add_task(self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
+
+            elif data.startswith("cosc:"):
+                contrato = int(data.split(":", 1)[1])
+                self.telegram_client.answer_callback_query(callback_id)
+                background.add_task(self.criar_os_escolher_motivo, chat_id, contrato)
+
+            elif data.startswith("cosm:"):
+                _, contrato, motivo = data.split(":", 2)
+                self.telegram_client.answer_callback_query(
+                    callback_id, texto="Carregando equipes..."
+                )
+                background.add_task(
+                    self.criar_os_escolher_equipe, chat_id, int(contrato), int(motivo)
+                )
+
+            elif data.startswith("cose:"):
+                _, contrato, motivo, equipe = data.split(":", 3)
+                self.telegram_client.answer_callback_query(callback_id)
+                background.add_task(
+                    self.criar_os_pedir_data,
+                    chat_id,
+                    user_id,
+                    int(contrato),
+                    int(motivo),
+                    equipe,
+                )
+
             else:
                 self.telegram_client.answer_callback_query(callback_id)
 
@@ -334,28 +620,70 @@ class OccurrenceService:
             chat_id = mensagem["chat"]["id"]
             texto = mensagem.get("text", "")
             de = mensagem.get("from", {})
+            user_id = de.get("id")
             user_name = de.get("first_name") or de.get("username")
             resposta_a = mensagem.get("reply_to_message") or {}
             reply_text = resposta_a.get("text", "")
+            chave = f"{chat_id}:{user_id}"
+
+            def _arg():
+                partes = texto.split(maxsplit=1)
+                return partes[1] if len(partes) > 1 else ""
 
             if texto in ("/menu", "/os"):
+                self._criar_os_estado.pop(chave, None)
                 background.add_task(self.telegram_client.enviar_menu, chat_id=chat_id)
 
             elif texto.startswith("/designar"):
+                self._criar_os_estado.pop(chave, None)
                 background.add_task(self.iniciar_designacao, chat_id)
 
-            else:
-                os_id = self.os_id_de_reagendamento(reply_text)
-                if os_id is not None:
+            elif texto.startswith("/cliente"):
+                if self._extrair_cpf(_arg()):
+                    background.add_task(self.consulta_cliente, chat_id, _arg())
+                else:
                     background.add_task(
-                        self.aplicar_horario,
-                        chat_id,
-                        os_id,
-                        texto,
-                        user_name,
-                        resposta_a.get("date", 0),
-                        mensagem.get("date", 0),
+                        self.pedir_cpf, chat_id, "🔎 <b>Consultar Cliente</b>"
                     )
+
+            elif texto.startswith("/fatura"):
+                if self._extrair_cpf(_arg()):
+                    background.add_task(self.enviar_faturas, chat_id, _arg())
+                else:
+                    background.add_task(
+                        self.pedir_cpf, chat_id, "💰 <b>Faturas do Cliente</b>"
+                    )
+
+            elif texto.startswith("/criaros"):
+                if self._extrair_cpf(_arg()):
+                    background.add_task(self.iniciar_criar_os, chat_id, _arg())
+                else:
+                    background.add_task(self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
+
+            elif self.os_id_de_reagendamento(reply_text) is not None:
+                background.add_task(
+                    self.aplicar_horario,
+                    chat_id,
+                    self.os_id_de_reagendamento(reply_text),
+                    texto,
+                    user_name,
+                    resposta_a.get("date", 0),
+                    mensagem.get("date", 0),
+                )
+
+            elif "Consultar Cliente" in reply_text:
+                background.add_task(self.consulta_cliente, chat_id, texto)
+
+            elif "Faturas do Cliente" in reply_text:
+                background.add_task(self.enviar_faturas, chat_id, texto)
+
+            elif "Criar OS" in reply_text:
+                background.add_task(self.iniciar_criar_os, chat_id, texto)
+
+            elif chave in self._criar_os_estado:
+                background.add_task(
+                    self.criar_os_receber_texto, chat_id, user_id, texto, user_name
+                )
 
             return {"ok": True}
 

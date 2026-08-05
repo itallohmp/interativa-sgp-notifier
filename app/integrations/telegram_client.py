@@ -46,14 +46,28 @@ class TelegramClient:
         url = f"{self.base_url}/sendMessage"
         payload = {
             "chat_id": chat_id or self.chat_id,
-            "text": "📡 <b>Interativa Fibra</b>\n\nEscolha o período das OS:",
+            "text": (
+                "📡 <b>Interativa Fibra — Menu</b>\n\n"
+                "<b>Ordens de Serviço</b>\n"
+                "<b>Cliente</b> — consulta, faturas e abertura de OS\n\n"
+                "Escolha uma opção:"
+            ),
             "parse_mode": "HTML",
             "reply_markup": {
                 "inline_keyboard": [
-                    [{"text": "📋 OS do Dia", "callback_data": "os_dia"}],
-                    [{"text": "📅 OS dos Últimos 7 Dias", "callback_data": "os_d7"}],
-                    [{"text": "📅 OS de Amanhã", "callback_data": "amanha"}],
-                    [{"text": "👷 Designar Equipe", "callback_data": "designar"}],
+                    [
+                        {"text": "📋 OS do Dia", "callback_data": "os_dia"},
+                        {"text": "📅 OS de Amanhã", "callback_data": "amanha"},
+                    ],
+                    [
+                        {"text": "🗓 Últimos 7 dias", "callback_data": "os_d7"},
+                        {"text": "👷 Designar / Reagendar", "callback_data": "designar"},
+                    ],
+                    [
+                        {"text": "🔎 Consultar Cliente", "callback_data": "cliente"},
+                        {"text": "💰 Faturas", "callback_data": "faturas"},
+                    ],
+                    [{"text": "🆕 Criar OS", "callback_data": "criaros"}],
                 ]
             },
         }
