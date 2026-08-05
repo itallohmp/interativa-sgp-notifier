@@ -16,6 +16,8 @@ class OccurrenceService:
     # marcador usado na pergunta de horário e lido de volta na resposta
     _MARCADOR_REAGENDAR = "Reagendar OS #{os_id}"
     _REGEX_REAGENDAR = re.compile(r"Reagendar OS #(\d+)")
+    # prazo para responder o reagendamento; depois disso volta ao menu
+    _PRAZO_REAGENDAR_SEGUNDOS = 15 * 60
 
     def __init__(self):
         self.sgp_client = SGPClient()
@@ -165,8 +167,26 @@ class OccurrenceService:
         os_id: int,
         texto: str,
         user_name: str | None = None,
+        data_pergunta: int = 0,
+        data_resposta: int = 0,
     ):
         """Recebe o horário respondido, grava no SGP e confirma."""
+        # prazo expirado: não reagenda, avisa e volta ao menu principal
+        if (
+            data_pergunta
+            and data_resposta
+            and data_resposta - data_pergunta > self._PRAZO_REAGENDAR_SEGUNDOS
+        ):
+            minutos = self._PRAZO_REAGENDAR_SEGUNDOS // 60
+            self.telegram_client.enviar_mensagem_para(
+                chat_id,
+                (
+                    f"⏱️ Tempo esgotado para reagendar a OS #{os_id} "
+                    f"(limite de {minutos} min). Voltando ao menu."
+                ),
+            )
+            return self.telegram_client.enviar_menu(chat_id)
+
         quando = self._parse_datetime(texto)
         if not quando:
             # mantém o marcador para que a nova resposta ainda traga o os_id
@@ -315,7 +335,8 @@ class OccurrenceService:
             texto = mensagem.get("text", "")
             de = mensagem.get("from", {})
             user_name = de.get("first_name") or de.get("username")
-            reply_text = (mensagem.get("reply_to_message") or {}).get("text", "")
+            resposta_a = mensagem.get("reply_to_message") or {}
+            reply_text = resposta_a.get("text", "")
 
             if texto in ("/menu", "/os"):
                 background.add_task(self.telegram_client.enviar_menu, chat_id=chat_id)
@@ -327,7 +348,13 @@ class OccurrenceService:
                 os_id = self.os_id_de_reagendamento(reply_text)
                 if os_id is not None:
                     background.add_task(
-                        self.aplicar_horario, chat_id, os_id, texto, user_name
+                        self.aplicar_horario,
+                        chat_id,
+                        os_id,
+                        texto,
+                        user_name,
+                        resposta_a.get("date", 0),
+                        mensagem.get("date", 0),
                     )
 
             return {"ok": True}
