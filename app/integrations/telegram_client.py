@@ -69,35 +69,64 @@ class TelegramClient:
             },
         )
 
+    # ---- conteúdo dos menus (reaproveitado para enviar e editar) ----
+    def _conteudo_menu(self, qual: str = "principal"):
+        if qual == "cliente":
+            texto = "👤 <b>Cliente</b>\n\nEscolha uma opção:"
+            teclado = [
+                [{"text": "🔎 Consultar Cliente", "callback_data": "cliente"}],
+                [{"text": "💰 Faturas", "callback_data": "faturas"}],
+                [{"text": "🆕 Criar OS", "callback_data": "criaros"}],
+                [{"text": "🔙 Voltar", "callback_data": "menu"}],
+            ]
+        elif qual == "os":
+            texto = "🔧 <b>Ordens de Serviço</b>\n\nEscolha uma opção:"
+            teclado = [
+                [
+                    {"text": "📋 OS do Dia", "callback_data": "os_dia"},
+                    {"text": "📅 OS de Amanhã", "callback_data": "amanha"},
+                ],
+                [{"text": "🗓 Últimos 7 dias", "callback_data": "os_d7"}],
+                [{"text": "👷 Designar / Reagendar", "callback_data": "designar"}],
+                [{"text": "🔙 Voltar", "callback_data": "menu"}],
+            ]
+        else:
+            texto = "📡 <b>Interativa Fibra — Menu</b>\n\nEscolha uma categoria:"
+            teclado = [
+                [{"text": "👤 Cliente", "callback_data": "menu_cliente"}],
+                [{"text": "🔧 Ordens de Serviço", "callback_data": "menu_os"}],
+            ]
+        return texto, teclado
+
     def enviar_menu(self, chat_id: int | str = None):
-        payload = {
-            "chat_id": chat_id or self.chat_id,
-            "text": (
-                "📡 <b>Interativa Fibra — Menu</b>\n\n"
-                "<b>Ordens de Serviço</b>\n"
-                "<b>Cliente</b> — consulta, faturas e abertura de OS\n\n"
-                "Escolha uma opção:"
-            ),
-            "parse_mode": "HTML",
-            "reply_markup": {
-                "inline_keyboard": [
-                    [
-                        {"text": "📋 OS do Dia", "callback_data": "os_dia"},
-                        {"text": "📅 OS de Amanhã", "callback_data": "amanha"},
-                    ],
-                    [
-                        {"text": "🗓 Últimos 7 dias", "callback_data": "os_d7"},
-                        {"text": "👷 Designar / Reagendar", "callback_data": "designar"},
-                    ],
-                    [
-                        {"text": "🔎 Consultar Cliente", "callback_data": "cliente"},
-                        {"text": "💰 Faturas", "callback_data": "faturas"},
-                    ],
-                    [{"text": "🆕 Criar OS", "callback_data": "criaros"}],
-                ]
+        """Envia o menu principal como mensagem nova (usado por /menu)."""
+        texto, teclado = self._conteudo_menu("principal")
+        return self._request(
+            "sendMessage",
+            {
+                "chat_id": chat_id or self.chat_id,
+                "text": texto,
+                "parse_mode": "HTML",
+                "reply_markup": {"inline_keyboard": teclado},
             },
-        }
-        return self._request("sendMessage", payload)
+        )
+
+    def editar_menu(self, chat_id: int | str, message_id: int, qual: str = "principal"):
+        """
+        Edita a MESMA mensagem para outro nível do menu (não manda nova).
+        É o que dá a sensação de menu interativo, sem poluir o chat.
+        """
+        texto, teclado = self._conteudo_menu(qual)
+        return self._request(
+            "editMessageText",
+            {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": texto,
+                "parse_mode": "HTML",
+                "reply_markup": {"inline_keyboard": teclado},
+            },
+        )
 
     def listar_administradores(self, chat_id: int | str) -> list:
         """Administradores do grupo (com id). Único jeito de puxar ids em lote."""
