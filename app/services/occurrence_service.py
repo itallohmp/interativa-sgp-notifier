@@ -567,7 +567,8 @@ class OccurrenceService:
                 frm.get("first_name") or frm.get("username") or ""
             )
 
-        comando = (texto or "").split(maxsplit=1)[0].split("@", 1)[0].lower()
+        partes = (texto or "").split(maxsplit=1)
+        comando = partes[0].split("@", 1)[0].lower() if partes else ""
         if comando in ("/meuid", "/id"):
             self.telegram_client.enviar_mensagem_para(
                 chat_id,
