@@ -8,19 +8,47 @@ class TelegramClient:
         self.chat_id = settings.TELEGRAM_CHAT_ID
         self.base_url = f"https://api.telegram.org/bot{self.token}"
 
+    def _request(self, metodo: str, payload: dict | None = None, params: dict | None = None):
+        """
+        Chama a API do Telegram SEM estourar exceção: em erro de rede ou HTTP,
+        loga e retorna None. Assim uma falha de envio não derruba a tarefa/rota.
+        """
+        url = f"{self.base_url}/{metodo}"
+        try:
+            if params is not None:
+                resp = httpx.get(url, params=params, timeout=20.0)
+            else:
+                resp = httpx.post(url, json=payload, timeout=30.0)
+        except httpx.HTTPError as erro:
+            print(f"[telegram] falha de rede em {metodo}: {erro}")
+            return None
+
+        if resp.status_code >= 400:
+            try:
+                descricao = resp.json().get("description")
+            except Exception:
+                descricao = resp.text[:200]
+            print(f"[telegram] {metodo} HTTP {resp.status_code}: {descricao}")
+            if descricao and "supergroup" in str(descricao):
+                print(
+                    "[telegram] DICA: o grupo virou supergrupo — "
+                    "atualize TELEGRAM_CHAT_ID no .env"
+                )
+            return None
+
+        try:
+            return resp.json()
+        except Exception:
+            return None
+
     def enviar_mensagem(self, mensagem: str):
         return self.enviar_mensagem_para(self.chat_id, mensagem)
 
     def enviar_mensagem_para(self, chat_id: int | str, mensagem: str):
-        url = f"{self.base_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": mensagem,
-            "parse_mode": "HTML",
-        }
-        response = httpx.post(url, json=payload, timeout=30.0)
-        response.raise_for_status()
-        return response.json()
+        return self._request(
+            "sendMessage",
+            {"chat_id": chat_id, "text": mensagem, "parse_mode": "HTML"},
+        )
 
     def enviar_forcando_resposta(self, chat_id: int | str, mensagem: str):
         """
@@ -28,22 +56,20 @@ class TelegramClient:
         mode ligado: só mensagens de texto que sejam RESPOSTA ao bot chegam ao
         webhook — texto solto não chega.
         """
-        url = f"{self.base_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id,
-            "text": mensagem,
-            "parse_mode": "HTML",
-            "reply_markup": {
-                "force_reply": True,
-                "input_field_placeholder": "21/07/2026 14:30",
+        return self._request(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": mensagem,
+                "parse_mode": "HTML",
+                "reply_markup": {
+                    "force_reply": True,
+                    "input_field_placeholder": "21/07/2026 14:30",
+                },
             },
-        }
-        response = httpx.post(url, json=payload, timeout=30.0)
-        response.raise_for_status()
-        return response.json()
+        )
 
     def enviar_menu(self, chat_id: int | str = None):
-        url = f"{self.base_url}/sendMessage"
         payload = {
             "chat_id": chat_id or self.chat_id,
             "text": (
@@ -71,28 +97,23 @@ class TelegramClient:
                 ]
             },
         }
-        response = httpx.post(url, json=payload, timeout=30.0)
-        response.raise_for_status()
-        return response.json()
+        return self._request("sendMessage", payload)
 
     def listar_administradores(self, chat_id: int | str) -> list:
         """Administradores do grupo (com id). Único jeito de puxar ids em lote."""
-        url = f"{self.base_url}/getChatAdministrators"
-        response = httpx.get(url, params={"chat_id": chat_id}, timeout=15.0)
-        dados = response.json()
-        return dados.get("result", []) if dados.get("ok") else []
+        dados = self._request("getChatAdministrators", params={"chat_id": chat_id})
+        return dados.get("result", []) if dados and dados.get("ok") else []
 
     def _enviar_com_teclado(self, chat_id, texto: str, teclado: list):
-        url = f"{self.base_url}/sendMessage"
-        payload = {
-            "chat_id": chat_id or self.chat_id,
-            "text": texto,
-            "parse_mode": "HTML",
-            "reply_markup": {"inline_keyboard": teclado},
-        }
-        response = httpx.post(url, json=payload, timeout=30.0)
-        response.raise_for_status()
-        return response.json()
+        return self._request(
+            "sendMessage",
+            {
+                "chat_id": chat_id or self.chat_id,
+                "text": texto,
+                "parse_mode": "HTML",
+                "reply_markup": {"inline_keyboard": teclado},
+            },
+        )
 
     def enviar_periodo_designacao(self, chat_id: int | str):
         """Passo 1: escolher o período (dia ou amanhã) das OS a designar."""
@@ -203,9 +224,8 @@ class TelegramClient:
         )
 
     def answer_callback_query(self, callback_query_id: str, texto: str = ""):
-        url = f"{self.base_url}/answerCallbackQuery"
-        payload = {
-            "callback_query_id": callback_query_id,
-            "text": texto, 
-        }
-        httpx.post(url, json=payload, timeout=10.0)
+        # chamado inline no webhook: nunca pode estourar
+        self._request(
+            "answerCallbackQuery",
+            {"callback_query_id": callback_query_id, "text": texto},
+        )

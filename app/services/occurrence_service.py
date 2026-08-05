@@ -587,10 +587,34 @@ class OccurrenceService:
 
         return True
 
+    def _seguro(self, func, *args, **kwargs):
+        """
+        Executa uma tarefa de fundo sem deixar exceção subir (evita traceback
+        na rota e ação silenciosamente quebrada). Loga e, se der pra saber o
+        chat, avisa o usuário.
+        """
+        try:
+            return func(*args, **kwargs)
+        except Exception as erro:
+            print(f"[erro] {getattr(func, '__name__', func)}: {type(erro).__name__}: {erro}")
+            chat = kwargs.get("chat_id") or (args[0] if args else None)
+            if isinstance(chat, (int, str)):
+                self.telegram_client.enviar_mensagem_para(
+                    chat, "⚠️ Não consegui concluir a ação. Tente novamente."
+                )
+
     async def processar_webhook(self, update: dict, background: BackgroundTasks):
 
         if not self._autorizado(update):
             return {"ok": True}
+
+        try:
+            return await self._rotear(update, background)
+        except Exception as erro:
+            print(f"[erro] processar_webhook: {type(erro).__name__}: {erro}")
+            return {"ok": True}
+
+    async def _rotear(self, update: dict, background: BackgroundTasks):
 
         if "callback_query" in update:
 
@@ -631,31 +655,31 @@ class OccurrenceService:
 
             elif data == "designar":
                 self.telegram_client.answer_callback_query(callback_id)
-                background.add_task(self.iniciar_designacao, chat_id)
+                background.add_task(self._seguro, self.iniciar_designacao, chat_id)
 
             elif data.startswith("dsg:"):
                 periodo = data.split(":", 1)[1]
                 self.telegram_client.answer_callback_query(
                     callback_id, texto="Carregando ocorrências..."
                 )
-                background.add_task(self.listar_os_designacao, chat_id, periodo)
+                background.add_task(self._seguro, self.listar_os_designacao, chat_id, periodo)
 
             elif data.startswith("os:"):
                 os_id = int(data.split(":", 1)[1])
                 self.telegram_client.answer_callback_query(callback_id)
-                background.add_task(self.abrir_acoes_os, chat_id, os_id)
+                background.add_task(self._seguro, self.abrir_acoes_os, chat_id, os_id)
 
             elif data.startswith("eql:"):
                 os_id = int(data.split(":", 1)[1])
                 self.telegram_client.answer_callback_query(
                     callback_id, texto="Carregando equipes..."
                 )
-                background.add_task(self.escolher_equipe, chat_id, os_id)
+                background.add_task(self._seguro, self.escolher_equipe, chat_id, os_id)
 
             elif data.startswith("hr:"):
                 os_id = int(data.split(":", 1)[1])
                 self.telegram_client.answer_callback_query(callback_id)
-                background.add_task(self.pedir_horario, chat_id, os_id)
+                background.add_task(self._seguro, self.pedir_horario, chat_id, os_id)
 
             elif data.startswith("eq:"):
                 _, os_id, tecnico = data.split(":", 2)
@@ -684,12 +708,12 @@ class OccurrenceService:
 
             elif data == "criaros":
                 self.telegram_client.answer_callback_query(callback_id)
-                background.add_task(self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
+                background.add_task(self._seguro, self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
 
             elif data.startswith("cosc:"):
                 contrato = int(data.split(":", 1)[1])
                 self.telegram_client.answer_callback_query(callback_id)
-                background.add_task(self.criar_os_escolher_motivo, chat_id, contrato)
+                background.add_task(self._seguro, self.criar_os_escolher_motivo, chat_id, contrato)
 
             elif data.startswith("cosm:"):
                 _, contrato, motivo = data.split(":", 2)
@@ -735,18 +759,18 @@ class OccurrenceService:
 
             if comando in ("/menu", "/os", "/start"):
                 self._criar_os_estado.pop(chave, None)
-                background.add_task(self.telegram_client.enviar_menu, chat_id=chat_id)
+                background.add_task(self._seguro, self.telegram_client.enviar_menu, chat_id=chat_id)
 
             elif comando == "/designar":
                 self._criar_os_estado.pop(chave, None)
-                background.add_task(self.iniciar_designacao, chat_id)
+                background.add_task(self._seguro, self.iniciar_designacao, chat_id)
 
             elif comando in ("/ids", "/grupo"):
-                background.add_task(self.enviar_ids_grupo, chat_id)
+                background.add_task(self._seguro, self.enviar_ids_grupo, chat_id)
 
             elif comando == "/cliente":
                 if self._extrair_cpf(arg):
-                    background.add_task(self.consulta_cliente, chat_id, arg)
+                    background.add_task(self._seguro, self.consulta_cliente, chat_id, arg)
                 else:
                     background.add_task(
                         self.pedir_cpf, chat_id, "🔎 <b>Consultar Cliente</b>"
@@ -754,7 +778,7 @@ class OccurrenceService:
 
             elif comando == "/fatura":
                 if self._extrair_cpf(arg):
-                    background.add_task(self.enviar_faturas, chat_id, arg)
+                    background.add_task(self._seguro, self.enviar_faturas, chat_id, arg)
                 else:
                     background.add_task(
                         self.pedir_cpf, chat_id, "💰 <b>Faturas do Cliente</b>"
@@ -762,9 +786,9 @@ class OccurrenceService:
 
             elif comando == "/criaros":
                 if self._extrair_cpf(arg):
-                    background.add_task(self.iniciar_criar_os, chat_id, arg)
+                    background.add_task(self._seguro, self.iniciar_criar_os, chat_id, arg)
                 else:
-                    background.add_task(self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
+                    background.add_task(self._seguro, self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
 
             elif self.os_id_de_reagendamento(reply_text) is not None:
                 background.add_task(
@@ -778,13 +802,13 @@ class OccurrenceService:
                 )
 
             elif "Consultar Cliente" in reply_text:
-                background.add_task(self.consulta_cliente, chat_id, texto)
+                background.add_task(self._seguro, self.consulta_cliente, chat_id, texto)
 
             elif "Faturas do Cliente" in reply_text:
-                background.add_task(self.enviar_faturas, chat_id, texto)
+                background.add_task(self._seguro, self.enviar_faturas, chat_id, texto)
 
             elif "Criar OS" in reply_text:
-                background.add_task(self.iniciar_criar_os, chat_id, texto)
+                background.add_task(self._seguro, self.iniciar_criar_os, chat_id, texto)
 
             elif chave in self._criar_os_estado:
                 background.add_task(
