@@ -99,3 +99,63 @@ class SGPClient:
     def alterar_agendamento(self, os_id: int, quando: str) -> dict:
         """Reagenda a OS. `quando` no formato 'AAAA-MM-DD HH:MM:SS'."""
         return self._chamado_update(os_id, {"os_data_agendamento": quando})
+
+    def _post(self, caminho: str, campos: dict | None = None) -> dict | list:
+        url = f"{self.base_url}{caminho}"
+        payload = {"app": self.app, "token": self.token, **(campos or {})}
+        response = httpx.post(url, json=payload, timeout=40.0)
+        response.raise_for_status()
+        return response.json()
+
+    def consultar_cliente(self, cpf: str) -> list:
+        """
+        Consulta o cliente por CPF/CNPJ e retorna a lista de contratos.
+        `radius=1` traz o campo servico_online (conexão online/offline).
+        """
+        dados = self._post(
+            "/api/ura/consultacliente/", {"cpfcnpj": cpf, "radius": 1}
+        )
+        if isinstance(dados, dict):
+            return dados.get("contratos", []) or []
+        return dados or []
+
+    def listar_faturas_abertas(self, contrato: int) -> list:
+        """Títulos em aberto do contrato (com link de cobrança/2ª via)."""
+        dados = self._post("/api/ura/titulos/", {"contrato": contrato})
+        titulos = dados.get("titulos", []) if isinstance(dados, dict) else []
+        return [t for t in titulos if str(t.get("status", "")).lower() == "aberto"]
+
+    def listar_ocorrencias_contrato(self, contrato: int, status: int = 0) -> list:
+        """Ocorrências do contrato (status 0 = Aberta por padrão)."""
+        dados = self._post(
+            "/api/ura/ocorrencia/list/",
+            {"contrato": contrato, "status": status, "limit": 20},
+        )
+        return dados.get("ocorrencias", []) if isinstance(dados, dict) else []
+
+    def criar_os(
+        self,
+        contrato: int,
+        motivoos: int,
+        ocorrenciatipo: int,
+        responsavel: str,
+        data_hora_agendamento: str,
+        observacao: str = "",
+        conteudo: str = "OS aberta via bot",
+    ) -> dict:
+        """
+        Cria uma ocorrência + OS via /api/ura/chamado/.
+        `data_hora_agendamento` no formato 'AAAA-MM-DD HH:MM'.
+        Obs.: o SGP sempre cria uma ocorrência nova (não anexa a existente).
+        """
+        campos = {
+            "contrato": contrato,
+            "motivoos": motivoos,
+            "ocorrenciatipo": ocorrenciatipo,
+            "responsavel": responsavel,
+            "data_hora_agendamento": data_hora_agendamento,
+            "conteudo": conteudo,
+        }
+        if observacao:
+            campos["observacao"] = observacao
+        return self._post("/api/ura/chamado/", campos)
