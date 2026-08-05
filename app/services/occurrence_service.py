@@ -484,11 +484,63 @@ class OccurrenceService:
             f"https://api.telegram.org/bot" f"{settings.TELEGRAM_BOT_TOKEN}/setWebhook"
         )
 
-        response = httpx.post(url, json={"url": webhook_url})
+        payload = {"url": webhook_url}
+        if settings.TELEGRAM_WEBHOOK_SECRET:
+            payload["secret_token"] = settings.TELEGRAM_WEBHOOK_SECRET
+
+        response = httpx.post(url, json=payload)
 
         return response.json()
 
+    def _identificar_origem(self, update: dict):
+        """Retorna (chat_id, user_id, callback_id, texto) do update."""
+        if "callback_query" in update:
+            cq = update["callback_query"]
+            chat_id = (cq.get("message") or {}).get("chat", {}).get("id")
+            return chat_id, cq.get("from", {}).get("id"), cq.get("id"), None
+        if "message" in update:
+            m = update["message"]
+            return (
+                m.get("chat", {}).get("id"),
+                m.get("from", {}).get("id"),
+                None,
+                m.get("text", ""),
+            )
+        return None, None, None, None
+
+    def _autorizado(self, update: dict) -> bool:
+        """
+        Fase 2: só processa em chats autorizados e (opcionalmente) de
+        usuários autorizados. /meuid é liberado para qualquer um coletar o id.
+        """
+        chat_id, user_id, callback_id, texto = self._identificar_origem(update)
+
+        chats = settings.allowed_chat_ids
+        if chats and str(chat_id) not in chats:
+            return False  # chat não autorizado: ignora em silêncio
+
+        if texto in ("/meuid", "/id"):
+            self.telegram_client.enviar_mensagem_para(
+                chat_id,
+                f"🆔 <b>Seu id:</b> <code>{user_id}</code>\n"
+                f"<b>Chat:</b> <code>{chat_id}</code>",
+            )
+            return False  # já respondido; não segue o fluxo normal
+
+        usuarios = settings.allowed_user_ids
+        if usuarios and str(user_id) not in usuarios:
+            if callback_id:
+                self.telegram_client.answer_callback_query(
+                    callback_id, texto="⛔ Sem permissão"
+                )
+            return False
+
+        return True
+
     async def processar_webhook(self, update: dict, background: BackgroundTasks):
+
+        if not self._autorizado(update):
+            return {"ok": True}
 
         if "callback_query" in update:
 
