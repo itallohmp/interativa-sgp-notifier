@@ -567,7 +567,8 @@ class OccurrenceService:
                 frm.get("first_name") or frm.get("username") or ""
             )
 
-        if texto in ("/meuid", "/id"):
+        comando = (texto or "").split(maxsplit=1)[0].split("@", 1)[0].lower()
+        if comando in ("/meuid", "/id"):
             self.telegram_client.enviar_mensagem_para(
                 chat_id,
                 f"🆔 <b>Seu id:</b> <code>{user_id}</code>\n"
@@ -726,40 +727,41 @@ class OccurrenceService:
             reply_text = resposta_a.get("text", "")
             chave = f"{chat_id}:{user_id}"
 
-            def _arg():
-                partes = texto.split(maxsplit=1)
-                return partes[1] if len(partes) > 1 else ""
+            # normaliza o comando: "/ids@meubot arg" -> comando="/ids", arg="arg"
+            partes = texto.split(maxsplit=1)
+            comando = partes[0].split("@", 1)[0].lower() if partes else ""
+            arg = partes[1] if len(partes) > 1 else ""
 
-            if texto in ("/menu", "/os"):
+            if comando in ("/menu", "/os", "/start"):
                 self._criar_os_estado.pop(chave, None)
                 background.add_task(self.telegram_client.enviar_menu, chat_id=chat_id)
 
-            elif texto.startswith("/designar"):
+            elif comando == "/designar":
                 self._criar_os_estado.pop(chave, None)
                 background.add_task(self.iniciar_designacao, chat_id)
 
-            elif texto in ("/ids", "/grupo"):
+            elif comando in ("/ids", "/grupo"):
                 background.add_task(self.enviar_ids_grupo, chat_id)
 
-            elif texto.startswith("/cliente"):
-                if self._extrair_cpf(_arg()):
-                    background.add_task(self.consulta_cliente, chat_id, _arg())
+            elif comando == "/cliente":
+                if self._extrair_cpf(arg):
+                    background.add_task(self.consulta_cliente, chat_id, arg)
                 else:
                     background.add_task(
                         self.pedir_cpf, chat_id, "🔎 <b>Consultar Cliente</b>"
                     )
 
-            elif texto.startswith("/fatura"):
-                if self._extrair_cpf(_arg()):
-                    background.add_task(self.enviar_faturas, chat_id, _arg())
+            elif comando == "/fatura":
+                if self._extrair_cpf(arg):
+                    background.add_task(self.enviar_faturas, chat_id, arg)
                 else:
                     background.add_task(
                         self.pedir_cpf, chat_id, "💰 <b>Faturas do Cliente</b>"
                     )
 
-            elif texto.startswith("/criaros"):
-                if self._extrair_cpf(_arg()):
-                    background.add_task(self.iniciar_criar_os, chat_id, _arg())
+            elif comando == "/criaros":
+                if self._extrair_cpf(arg):
+                    background.add_task(self.iniciar_criar_os, chat_id, arg)
                 else:
                     background.add_task(self.pedir_cpf, chat_id, "🆕 <b>Criar OS</b>")
 
