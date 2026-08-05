@@ -1,5 +1,5 @@
 import httpx
-from fastapi import BackgroundTasks, FastAPI, Request
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 
 from app.config import settings
 from app.integrations.telegram_client import TelegramClient
@@ -53,5 +53,11 @@ def configurar_webhook():
 
 @app.post("/webhook")
 async def webhook(request: Request, background: BackgroundTasks):
+    # Fase 1: só aceita requisições que trazem o secret token do Telegram.
+    segredo = settings.TELEGRAM_WEBHOOK_SECRET
+    if segredo:
+        recebido = request.headers.get("X-Telegram-Bot-Api-Secret-Token")
+        if recebido != segredo:
+            raise HTTPException(status_code=403, detail="forbidden")
     update = await request.json()
     return await service.processar_webhook(update, background)
