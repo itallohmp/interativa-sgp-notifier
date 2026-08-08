@@ -1,6 +1,7 @@
 import html
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime
 
 import httpx
@@ -258,11 +259,35 @@ class OccurrenceService:
         digitos = re.sub(r"\D", "", texto or "")
         return digitos if len(digitos) in (11, 14) else None
 
+    @staticmethod
+    def _paralelo(func, itens: list) -> list:
+        """Roda `func` para cada item em paralelo (chamadas SGP são I/O)."""
+        if not itens:
+            return []
+        with ThreadPoolExecutor(max_workers=min(8, len(itens))) as executor:
+            return list(executor.map(func, itens))
+
+    @staticmethod
+    def _msg_id(resposta) -> int | None:
+        if isinstance(resposta, dict):
+            return (resposta.get("result") or {}).get("message_id")
+        return None
+
     def pedir_cpf(self, chat_id: int | str, marcador: str):
         """Pede o CPF com ForceReply (chega ao webhook mesmo no grupo)."""
         return self.telegram_client.enviar_forcando_resposta(
             chat_id,
             f"{marcador}\n\nResponda com o <b>CPF/CNPJ</b> do cliente.",
+        )
+
+    def _responder_editando(self, chat_id, msg_id, mensagem):
+        """Edita a mensagem de 'carregando' para o resultado (ou envia nova)."""
+        if msg_id:
+            return self.telegram_client.editar_texto(
+                chat_id, msg_id, mensagem, self._TECLADO_MENU
+            )
+        return self.telegram_client._enviar_com_teclado(
+            chat_id, mensagem, self._TECLADO_MENU
         )
 
     def consulta_cliente(self, chat_id: int | str, cpf_texto: str):
@@ -271,18 +296,25 @@ class OccurrenceService:
             return self.telegram_client.enviar_mensagem_para(
                 chat_id, "❌ CPF/CNPJ inválido. Envie 11 (CPF) ou 14 (CNPJ) dígitos."
             )
-        contratos = self.sgp_client.consultar_cliente(cpf)
-        ocs = {}
-        for c in contratos:
-            status = str(c.get("contratoStatusDisplay") or "").lower()
-            if "cancel" not in status:
-                ocs[c.get("contratoId")] = self.sgp_client.listar_ocorrencias_contrato(
-                    c.get("contratoId")
-                )
-        mensagem = formatar_cliente(contratos, ocs)
-        return self.telegram_client._enviar_com_teclado(
-            chat_id, mensagem, self._TECLADO_MENU
+        # feedback imediato: a mesma mensagem vira o resultado no fim
+        msg_id = self._msg_id(
+            self.telegram_client.enviar_mensagem_para(chat_id, "🔎 Consultando cliente…")
         )
+        contratos = self.sgp_client.consultar_cliente(cpf)
+        ativos = [
+            c
+            for c in contratos
+            if "cancel" not in str(c.get("contratoStatusDisplay") or "").lower()
+        ]
+        pares = self._paralelo(
+            lambda c: (
+                c.get("contratoId"),
+                self.sgp_client.listar_ocorrencias_contrato(c.get("contratoId")),
+            ),
+            ativos,
+        )
+        mensagem = formatar_cliente(contratos, dict(pares))
+        return self._responder_editando(chat_id, msg_id, mensagem)
 
     def enviar_faturas(self, chat_id: int | str, cpf_texto: str):
         cpf = self._extrair_cpf(cpf_texto)
@@ -290,22 +322,23 @@ class OccurrenceService:
             return self.telegram_client.enviar_mensagem_para(
                 chat_id, "❌ CPF/CNPJ inválido. Envie 11 (CPF) ou 14 (CNPJ) dígitos."
             )
+        msg_id = self._msg_id(
+            self.telegram_client.enviar_mensagem_para(chat_id, "💰 Buscando faturas…")
+        )
         contratos = self.sgp_client.consultar_cliente(cpf)
         if not contratos:
-            return self.telegram_client.enviar_mensagem_para(
-                chat_id, "🔎 Nenhum cliente encontrado para esse CPF/CNPJ."
+            return self._responder_editando(
+                chat_id, msg_id, "🔎 Nenhum cliente encontrado para esse CPF/CNPJ."
             )
-        blocos = [
-            {
+        pares = self._paralelo(
+            lambda c: {
                 "contrato": c.get("contratoId"),
                 "faturas": self.sgp_client.listar_faturas_abertas(c.get("contratoId")),
-            }
-            for c in contratos
-        ]
-        mensagem = formatar_faturas(blocos)
-        return self.telegram_client._enviar_com_teclado(
-            chat_id, mensagem, self._TECLADO_MENU
+            },
+            contratos,
         )
+        mensagem = formatar_faturas(pares)
+        return self._responder_editando(chat_id, msg_id, mensagem)
 
     def iniciar_criar_os(self, chat_id: int | str, cpf_texto: str):
         cpf = self._extrair_cpf(cpf_texto)
