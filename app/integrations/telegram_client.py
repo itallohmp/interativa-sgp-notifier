@@ -128,6 +128,18 @@ class TelegramClient:
             },
         )
 
+    def editar_texto(self, chat_id: int | str, message_id: int, texto: str, teclado: list | None = None):
+        """Edita o texto (e opcionalmente os botões) de uma mensagem existente."""
+        payload = {
+            "chat_id": chat_id,
+            "message_id": message_id,
+            "text": texto,
+            "parse_mode": "HTML",
+        }
+        if teclado is not None:
+            payload["reply_markup"] = {"inline_keyboard": teclado}
+        return self._request("editMessageText", payload)
+
     def listar_administradores(self, chat_id: int | str) -> list:
         """Administradores do grupo (com id). Único jeito de puxar ids em lote."""
         dados = self._request("getChatAdministrators", params={"chat_id": chat_id})
