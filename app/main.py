@@ -60,4 +60,6 @@ async def webhook(request: Request, background: BackgroundTasks):
         if recebido != segredo:
             raise HTTPException(status_code=403, detail="forbidden")
     update = await request.json()
-    return await service.processar_webhook(update, background)
+    # responde 200 na hora; processa em thread (não bloqueia o event loop)
+    background.add_task(service.processar_update, update)
+    return {"ok": True}
