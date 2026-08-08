@@ -1,3 +1,5 @@
+import time
+
 import httpx
 from app.config import settings
 
@@ -14,6 +16,7 @@ class TelegramClient:
         loga e retorna None. Assim uma falha de envio não derruba a tarefa/rota.
         """
         url = f"{self.base_url}/{metodo}"
+        inicio = time.time()
         try:
             if params is not None:
                 resp = httpx.get(url, params=params, timeout=20.0)
@@ -22,6 +25,7 @@ class TelegramClient:
         except httpx.HTTPError as erro:
             print(f"[telegram] falha de rede em {metodo}: {erro}")
             return None
+        print(f"[tempo] TG {metodo} {time.time() - inicio:.2f}s")
 
         if resp.status_code >= 400:
             try:
