@@ -1,5 +1,21 @@
+import socket
+
 import httpx
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+
+# O IPv6 do servidor é um buraco (blackhole): conexões de saída para Telegram/
+# SGP resolvem primeiro em IPv6 e travam até o timeout. Diferente do curl, o
+# httpx não faz fallback. Solução: preferir IPv4 na resolução de nomes.
+_getaddrinfo_original = socket.getaddrinfo
+
+
+def _preferir_ipv4(host, port, family=0, *args, **kwargs):
+    resultados = _getaddrinfo_original(host, port, family, *args, **kwargs)
+    apenas_v4 = [r for r in resultados if r[0] == socket.AF_INET]
+    return apenas_v4 or resultados
+
+
+socket.getaddrinfo = _preferir_ipv4
 
 from app.config import settings
 from app.integrations.telegram_client import TelegramClient
