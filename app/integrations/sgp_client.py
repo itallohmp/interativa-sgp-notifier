@@ -1,6 +1,11 @@
+import time
 import httpx
 from datetime import date, timedelta
 from app.config import settings
+
+
+def _cronometrar(rotulo: str, inicio: float):
+    print(f"[tempo] SGP {rotulo} {time.time() - inicio:.2f}s")
 
 
 class SGPClient:
@@ -23,7 +28,9 @@ class SGPClient:
         if data_final:
             payload["agendamento_final"] = data_final
 
+        inicio = time.time()
         response = httpx.post(url, json=payload, timeout=30.0)
+        _cronometrar("/api/os/list", inicio)
         response.raise_for_status()
         return response.json()
 
@@ -103,7 +110,9 @@ class SGPClient:
     def _post(self, caminho: str, campos: dict | None = None) -> dict | list:
         url = f"{self.base_url}{caminho}"
         payload = {"app": self.app, "token": self.token, **(campos or {})}
+        inicio = time.time()
         response = httpx.post(url, json=payload, timeout=40.0)
+        _cronometrar(caminho, inicio)
         response.raise_for_status()
         return response.json()
 
